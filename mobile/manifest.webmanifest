@@ -1,6 +1,6 @@
 {
-  "name": "Ada",
-  "short_name": "Ada",
+  "name": "DevBar",
+  "short_name": "DevBar",
   "description": "Claude Code oturumların cebinde: izle, yanıtla, yeni oturum aç.",
   "lang": "tr",
   "start_url": "./",

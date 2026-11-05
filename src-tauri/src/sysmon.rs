@@ -126,8 +126,8 @@ fn guess_kind(name: &str, cmd: &str, port: u16) -> &'static str {
     if has("php") {
         return "PHP";
     }
-    if has("ada") {
-        return "Ada";
+    if has("devbar") {
+        return "DevBar";
     }
     if has("code") {
         return "VS Code";
@@ -337,13 +337,16 @@ pub fn start(app: AppHandle, st: Shared) {
             if tick % 2 == 0 {
                 sum.ports = st.mon.ports().iter().filter(|p| p.dev).count();
             }
+            // Hızlı olanlar hemen gitsin; Docker ve git (yavaş) gelince ayrıca yayınlanır.
+            let _ = app.emit("sys", sum.clone());
             if tick % 10 == 0 {
                 sum.docker = docker().map(|c| c.len());
+                let _ = app.emit("sys", sum.clone());
             }
             if tick % 20 == 0 {
                 sum.git = git(&project_dirs(&st)).iter().filter(|r| r.changes > 0 || r.ahead > 0).count();
+                let _ = app.emit("sys", sum.clone());
             }
-            let _ = app.emit("sys", sum.clone());
             tick += 1;
             std::thread::sleep(Duration::from_secs(3));
         }

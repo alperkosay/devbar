@@ -13,6 +13,8 @@ const ago = (ms) => {
   if (s < 3600) return `${Math.floor(s / 60)} dk`;
   return `${Math.floor(s / 3600)} sa`;
 };
+// Oturumun görünen adı: kullanıcının verdiği ad, yoksa proje klasörü.
+const nameOf = (a) => a?.name || a?.project || '';
 const STATUS_LABEL = { running: 'Çalışıyor', waiting: 'Seni bekliyor', done: 'Bitti', idle: 'Hazır', off: 'Kapalı' };
 
 // Öncelik: izin/cevap bekleyen > çalışan > biten > boşta. 3 saattir sessiz olanlar gizlenir.

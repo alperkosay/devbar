@@ -1,4 +1,4 @@
-// Ada ana penceresi: solda oturumlar (Ada'dakiler ve dışarıdakiler), sağda seçili oturumun
+// DevBar ana penceresi: solda oturumlar (DevBar'dakiler ve dışarıdakiler), sağda seçili oturumun
 // gerçek terminali ve altta mesaj kutusu. Yeni oturum, dış oturum ayrıntısı ve ayarlar da burada.
 const termsEl = $('terms');
 const viewEl = $('view');
@@ -18,6 +18,7 @@ const S = {
 };
 
 const curTab = () => S.tabs.find((t) => t.id === S.selected) || null;
+const tabName = (t) => t.name || folderName(t.cwd);
 const tabAgent = (tabId) => [...S.agents.values()].find((a) => a.tab === tabId) || null;
 const tabStatus = (t) => (t.alive ? tabAgent(t.id)?.status || 'idle' : 'off');
 
@@ -36,7 +37,7 @@ function renderSide() {
       const sub = !t.alive ? (t.used ? 'Kapalı · devam edebilirsin' : 'Kapalı') : a?.activity || 'Hazır';
       const cls = [st, S.view === 'term' && S.selected === t.id ? 'active' : '', a?.unread ? 'unread' : ''].join(' ');
       return `<button class="item ${cls}" data-tab="${t.id}" title="${esc(t.cwd)}${a?.prompt ? '\n' + esc(a.prompt) : ''}">
-        <span class="dot ${st}"></span><span class="it"><b>${esc(folderName(t.cwd))}</b><span>${esc(sub)}</span></span>
+        <span class="dot ${st}"></span><span class="it"><b>${esc(tabName(t))}</b><span>${esc(sub)}</span></span>
         <span class="x" data-close="${t.id}" title="Oturumu kapat">${I.x}</span></button>`;
     })
     .join('');
@@ -48,7 +49,7 @@ function renderSide() {
     ? ext
         .map(
           (a) => `<button class="item ${a.status} ${S.view === 'ext' && S.ext === a.sessionId ? 'active' : ''}" data-sid="${esc(a.sessionId)}" title="${esc(a.cwd)}">
-        <span class="dot ${a.status}"></span><span class="it"><b>${esc(a.project)}</b><span>${esc(a.activity)}</span></span>
+        <span class="dot ${a.status}"></span><span class="it"><b>${esc(nameOf(a))}</b><span>${esc(a.activity)}</span></span>
         <span class="when">${ago(a.updated)}</span></button>`,
         )
         .join('')
@@ -67,14 +68,14 @@ function renderHead() {
     const t = curTab();
     const a = tabAgent(t.id);
     const st = tabStatus(t);
-    html = `<div class="mh-main"><div class="mh-title"><span class="dot ${st}"></span><h2>${esc(folderName(t.cwd))}</h2><span class="pill ${st}">${STATUS_LABEL[st]}</span></div>
+    html = `<div class="mh-main"><div class="mh-title"><span class="dot ${st}"></span>${titleHtml(tabName(t), folderName(t.cwd))}<span class="pill ${st}">${STATUS_LABEL[st]}</span></div>
       <div class="mh-sub">${esc(t.cwd)}${a?.activity && t.alive ? ' · ' + esc(a.activity) : ''}</div></div>
       <div class="mh-actions"><button class="mini danger" data-act="close-tab">${I.x}<span>Oturumu kapat</span></button></div>`;
   } else if (S.view === 'ext') {
     const a = S.agents.get(S.ext);
     html = a
-      ? `<div class="mh-main"><div class="mh-title"><span class="dot ${a.status}"></span><h2>${esc(a.project)}</h2><span class="pill ${a.status}">${STATUS_LABEL[a.status] || a.status}</span></div>
-        <div class="mh-sub">${esc(a.cwd)} · Ada dışında çalışıyor</div></div>`
+      ? `<div class="mh-main"><div class="mh-title"><span class="dot ${a.status}"></span>${titleHtml(nameOf(a), a.project)}<span class="pill ${a.status}">${STATUS_LABEL[a.status] || a.status}</span></div>
+        <div class="mh-sub">${esc(a.cwd)} · DevBar dışında çalışıyor</div></div>`
       : '';
   } else if (S.view === 'settings') {
     html = `<div class="mh-main"><div class="mh-title">${I.sliders}<h2>Ayarlar</h2></div><div class="mh-sub">Tüm ayarlar hemen kaydedilir</div></div>`;
@@ -82,6 +83,31 @@ function renderHead() {
     html = `<div class="mh-main"><div class="mh-title">${I.spark}<h2>Yeni oturum</h2></div><div class="mh-sub">Bir klasör seç, içinde Claude Code açılır</div></div>`;
   }
   $('mhead').innerHTML = html;
+}
+
+// Başlıkta ad; kaleme basınca (ya da listede çift tıklayınca) yerinde düzenlenir.
+function titleHtml(name, fallback) {
+  if (S.renaming) return `<input class="rename" id="rename" value="${esc(name)}" placeholder="${esc(fallback)}" spellcheck="false">`;
+  return `<h2>${esc(name)}</h2><button class="pen" data-act="rename" title="Yeniden adlandır">${I.pen}</button>`;
+}
+
+function startRename() {
+  S.renaming = true;
+  renderHead();
+  const inp = $('rename');
+  inp?.focus();
+  inp?.select();
+}
+
+function saveRename(value) {
+  S.renaming = false;
+  const target = S.view === 'term' ? S.selected : S.view === 'ext' ? S.ext : null;
+  if (target) {
+    const tab = S.tabs.find((t) => t.id === target);
+    if (tab) tab.name = value.trim();
+    invoke('rename', { target, name: value });
+  }
+  renderAll();
 }
 
 function renderBody() {
@@ -134,9 +160,9 @@ function extHtml() {
       <dt>Klasör</dt><dd>${esc(a.cwd)}</dd>
       <dt>Son hareket</dt><dd>${ago(a.updated)} önce</dd>
     </dl>
-    <div class="note">${I.eye}<span>Bu oturum Ada dışında (terminal ya da VS Code) çalışıyor. Buradan izleyebilirsin; yazmak için kendi penceresine geç ya da Ada'ya taşı.</span></div>
-    ${live ? `<div class="note warn">${I.alert}<span>Oturum şu an açık. Ada'da devam edersen iki yerden aynı anda yazma; önce diğer pencerede kapat.</span></div>` : ''}
-    <div><button class="primary" data-act="adopt">${I.play}<span>Ada'da devam et</span></button></div>
+    <div class="note">${I.eye}<span>Bu oturum DevBar dışında (terminal ya da VS Code) çalışıyor. Buradan izleyebilirsin; yazmak için kendi penceresine geç ya da DevBar'a taşı.</span></div>
+    ${live ? `<div class="note warn">${I.alert}<span>Oturum şu an açık. DevBar'da devam edersen iki yerden aynı anda yazma; önce diğer pencerede kapat.</span></div>` : ''}
+    <div><button class="primary" data-act="adopt">${I.play}<span>DevBar'da devam et</span></button></div>
   </div>`;
 }
 
@@ -178,8 +204,8 @@ function settingsHtml() {
     ${remoteHtml()}
     <div class="row"><div class="lbl"><b>Hatırlatıcılar</b><span>Windows bildirimi olarak gelir; 5 dk bilgisayar başında değilsen sayaç baştan başlar</span></div></div>
     ${rems}
-    <div class="row"><div class="lbl"><b>Kısayol</b><span>Ada penceresini her yerden aç / gizle</span></div><div class="keys"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>Space</kbd></div></div>
-    <div class="row"><div class="lbl"><b>Uygulama</b><span>Pencereyi kapatmak Ada'yı kapatmaz; tamamen çıkmak için</span></div><button class="danger" data-act="quit">${I.power}<span>Ada'dan çık</span></button></div>
+    <div class="row"><div class="lbl"><b>Kısayol</b><span>DevBar penceresini her yerden aç / gizle</span></div><div class="keys"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>Space</kbd></div></div>
+    <div class="row"><div class="lbl"><b>Uygulama</b><span>Pencereyi kapatmak DevBar'ı kapatmaz; tamamen çıkmak için</span></div><button class="danger" data-act="quit">${I.power}<span>DevBar'dan çık</span></button></div>
   </div>`;
 }
 
@@ -437,7 +463,7 @@ $('send').innerHTML = I.up;
 $('send').addEventListener('click', sendInput);
 
 // ---------- Tıklamalar ----------
-$('logo').innerHTML = `${I.spark}<b>Ada</b>`;
+$('logo').innerHTML = `${I.spark}<b>DevBar</b>`;
 $('btn-new').innerHTML = `${I.plus}<span>Yeni oturum</span>`;
 $('btn-settings').innerHTML = `${I.sliders}<span>Ayarlar</span>`;
 $('btn-new').addEventListener('click', () => {
@@ -469,6 +495,26 @@ document.querySelector('.side').addEventListener('click', (e) => {
 
 $('mhead').addEventListener('click', (e) => {
   if (e.target.closest('[data-act="close-tab"]') && S.selected) closeTab(S.selected);
+  if (e.target.closest('[data-act="rename"]')) startRename();
+});
+$('mhead').addEventListener('keydown', (e) => {
+  if (e.target.id !== 'rename') return;
+  if (e.key === 'Enter') saveRename(e.target.value);
+  else if (e.key === 'Escape') {
+    S.renaming = false;
+    renderHead();
+  }
+});
+$('mhead').addEventListener('focusout', (e) => {
+  if (e.target.id === 'rename' && S.renaming) saveRename(e.target.value);
+});
+// Listede çift tıklama: seç ve adlandır.
+document.querySelector('.side').addEventListener('dblclick', (e) => {
+  const item = e.target.closest('[data-tab], [data-sid]');
+  if (!item) return;
+  if (item.dataset.tab) selectTab(item.dataset.tab);
+  else showExt(item.dataset.sid);
+  startRename();
 });
 
 viewEl.addEventListener('click', async (e) => {

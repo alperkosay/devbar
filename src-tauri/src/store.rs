@@ -65,13 +65,15 @@ impl Default for Settings {
     }
 }
 
-/// Ada içindeki bir terminal sekmesi.
+/// DevBar içindeki bir terminal sekmesi.
 #[derive(Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Tab {
     pub id: String,
+    /// Kullanıcının verdiği ad; boşsa klasör adı gösterilir.
+    pub name: String,
     pub cwd: String,
-    /// Claude Code session id. Yeni sekmede Ada üretir (`--session-id`), sonra hook'larla güncellenir.
+    /// Claude Code session id. Yeni sekmede DevBar üretir (`--session-id`), sonra hook'larla güncellenir.
     pub claude_id: String,
     /// İçinde en az bir prompt gönderildi mi; gönderildiyse yeniden açarken `--resume` kullanılır.
     pub used: bool,

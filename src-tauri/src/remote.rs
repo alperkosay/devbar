@@ -1,4 +1,4 @@
-// Telefon erişimi: Ada'nın PWA'sını ve token korumalı küçük bir API'yi LAN üzerinden sunar.
+// Telefon erişimi: DevBar'ın PWA'sını ve token korumalı küçük bir API'yi LAN üzerinden sunar.
 //
 // Sunucunun yaşam döngüsü: ayar açılınca 0.0.0.0:47822'de tiny_http sunucusu kurulur.
 // Kapatılınca önce `unblock` ile bizim kabul döngümüz durdurulur, sunucu bırakılır, sonra
@@ -331,7 +331,7 @@ fn read_json(req: &mut Request) -> Value {
 }
 
 fn handle(app: &AppHandle, st: &Shared, mut req: Request) {
-    // Aynı kaynaktan (Ada'nın kendi sunduğu PWA) gelen isteklerde CORS gerekmez;
+    // Aynı kaynaktan (DevBar'ın kendi sunduğu PWA) gelen isteklerde CORS gerekmez;
     // izin verilen tek dış kaynak GitHub Pages kopyası.
     let cors = req_header(&req, "Origin").filter(|o| o == PAGES_ORIGIN);
     let cors = cors.as_deref();
@@ -507,7 +507,7 @@ fn serve_static(req: Request, path: &str, method: &Method) {
     }
     let path = if path == "/" { "/index.html" } else { path };
     match ASSETS.iter().find(|(p, _, _)| *p == path) {
-        // no-cache: telefon her açılışta sürümü doğrular, Ada güncellenince PWA da güncellenir.
+        // no-cache: telefon her açılışta sürümü doğrular, DevBar güncellenince PWA da güncellenir.
         Some((_, body, ctype)) => reply(req, 200, ctype, body.to_vec(), None, "no-cache"),
         None => reply(req, 404, "text/plain; charset=utf-8", b"Bulunamadi".to_vec(), None, "no-store"),
     }

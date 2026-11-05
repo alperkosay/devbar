@@ -1,5 +1,5 @@
-// Ada telefon arayüzü: tüm Claude oturumlarını canlı izler, Ada sekmelerine yazar, yeni oturum açar.
-// Ada'nın kendisi sunuyorsa (evde, http://<bilgisayar>:47822) API aynı adreste. GitHub Pages'ten
+// DevBar telefon arayüzü: tüm Claude oturumlarını canlı izler, DevBar sekmelerine yazar, yeni oturum açar.
+// DevBar'ın kendisi sunuyorsa (evde, http://<bilgisayar>:47822) API aynı adreste. GitHub Pages'ten
 // açıldıysa sunucu adresi ve token Bağlantı ekranından (ya da #server=...&token=... ile) gelir.
 'use strict';
 
@@ -41,7 +41,7 @@ const S = {
   tab: null, // açık sekme id
 };
 
-// Bağlantı: base boşsa aynı adres (Ada'nın kendisi sunuyor).
+// Bağlantı: base boşsa aynı adres (DevBar'ın kendisi sunuyor).
 const C = {
   base: '',
   token: '',
@@ -111,7 +111,7 @@ function connect() {
   disconnect();
   if (!C.token || (ON_PAGES && !C.base)) return setStatus('setup');
   if (location.protocol === 'https:' && C.base.startsWith('http://')) {
-    return setStatus('setup', 'HTTPS sayfa http adrese bağlanamaz. Tailscale gibi bir HTTPS adresi kullan ya da evde Ada\'nın kendi adresini aç.');
+    return setStatus('setup', 'HTTPS sayfa http adrese bağlanamaz. Tailscale gibi bir HTTPS adresi kullan ya da evde DevBar\'ın kendi adresini aç.');
   }
   if (C.status !== 'online') setStatus('connecting');
   let url = `${C.base}/api/events?token=${encodeURIComponent(C.token)}`;
@@ -178,7 +178,7 @@ async function probe() {
   try {
     await api('/api/state');
   } catch (e) {
-    if (e.status === 401) return setStatus('auth', 'Token geçersiz. Bilgisayardaki Ada\'da QR\'ı yeniden okut.');
+    if (e.status === 401) return setStatus('auth', 'Token geçersiz. Bilgisayardaki DevBar\'da QR\'ı yeniden okut.');
     setStatus('offline');
   }
   const wait = Math.min(15000, 1000 * 2 ** C.retry) * (0.8 + Math.random() * 0.4);
@@ -197,7 +197,7 @@ function onState(st) {
     return closeTab();
   }
   if (S.tab && !S.tabs.get(S.tab).alive) {
-    // Kapalı sekmenin bu Ada açılışında çıktısı olmayabilir; ekran gelmezse "devam et" göster.
+    // Kapalı sekmenin bu DevBar açılışında çıktısı olmayabilir; ekran gelmezse "devam et" göster.
     setTimeout(() => {
       if (S.tab && $('tv-over').dataset.kind === 'loading') showOverlay('closed');
     }, 600);
@@ -221,7 +221,7 @@ window.addEventListener('online', () => {
 const PRI = { waiting: 4, running: 3, done: 2, idle: 1, off: 0 };
 const LABEL = { running: 'Çalışıyor', waiting: 'Seni bekliyor', done: 'Bitti', idle: 'Hazır', off: 'Kapalı' };
 
-// Hook'tan gelen oturumlar ve henüz oturumu görünmeyen Ada sekmeleri, tek liste.
+// Hook'tan gelen oturumlar ve henüz oturumu görünmeyen DevBar sekmeleri, tek liste.
 function items() {
   const cut = Date.now() - 6 * 3600e3;
   const list = [];
@@ -260,7 +260,7 @@ function connPill() {
 }
 
 function card(it, i) {
-  const badge = it.tab ? '<span class="src ada">Ada</span>' : '<span class="src">Terminal</span>';
+  const badge = it.tab ? '<span class="src ada">DevBar</span>' : '<span class="src">Terminal</span>';
   const time = it.updated ? `<span class="time">${ago(it.updated)}</span>` : '';
   const prompt = it.prompt ? `<div class="pr">${esc(it.prompt)}</div>` : '';
   const go = it.tab ? `<span class="go">${I.right}</span>` : '';
@@ -306,12 +306,12 @@ function offlineHtml() {
   }
   const auth = C.status === 'auth';
   const setup = C.status === 'setup';
-  const title = setup ? 'Ada\'ya bağlan' : auth ? 'Token geçersiz' : 'Bağlantı yok';
+  const title = setup ? 'DevBar\'a bağlan' : auth ? 'Token geçersiz' : 'Bağlantı yok';
   const text = setup
-    ? 'Bilgisayardaki Ada\'da Ayarlar → Telefon erişimi\'ni aç ve QR kodu telefonun kamerasıyla okut.'
+    ? 'Bilgisayardaki DevBar\'da Ayarlar → Telefon erişimi\'ni aç ve QR kodu telefonun kamerasıyla okut.'
     : auth
-      ? 'Token yenilenmiş olabilir. Bilgisayardaki Ada\'da QR kodu yeniden okut.'
-      : `${esc(serverLabel())} adresine ulaşılamıyor. Bilgisayar açık mı, Ada çalışıyor mu, aynı Wi-Fi'da mısın? Tekrar deniyorum.`;
+      ? 'Token yenilenmiş olabilir. Bilgisayardaki DevBar\'da QR kodu yeniden okut.'
+      : `${esc(serverLabel())} adresine ulaşılamıyor. Bilgisayar açık mı, DevBar çalışıyor mu, aynı Wi-Fi'da mısın? Tekrar deniyorum.`;
   return `<div class="empty"><div class="big ${setup ? '' : 'red'}">${setup ? I.link : auth ? I.key : I.wifiOff}</div><h3>${title}</h3><p>${text}</p>
     <button class="ghost" data-go="conn">${I.link}<span>Bağlantı ayarları</span></button></div>`;
 }
@@ -322,8 +322,8 @@ function newHtml() {
   if (!S.loaded) return head + offlineHtml();
   const seen = new Set();
   const dirs = [S.defaultCwd, ...S.recent].filter((d) => d && !seen.has(d.toLowerCase()) && seen.add(d.toLowerCase()));
-  if (!dirs.length) return head + `<div class="empty"><div class="big">${I.folder}</div><h3>Klasör yok</h3><p>Bilgisayarda Ada'dan bir oturum açınca son klasörler burada listelenir.</p></div>`;
-  return `${head}<p class="lead">Bir klasör seç. Ada bilgisayarda o klasörde <b>claude</b> açar, ekranı buraya gelir.</p>
+  if (!dirs.length) return head + `<div class="empty"><div class="big">${I.folder}</div><h3>Klasör yok</h3><p>Bilgisayarda DevBar'dan bir oturum açınca son klasörler burada listelenir.</p></div>`;
+  return `${head}<p class="lead">Bir klasör seç. DevBar bilgisayarda o klasörde <b>claude</b> açar, ekranı buraya gelir.</p>
     <div class="cards">${dirs
       .map(
         (d, i) => `<button class="frow" style="animation-delay:${i * 30}ms" data-cwd="${esc(d)}"><span class="fi">${I.folder}</span>
@@ -357,24 +357,24 @@ function connHtml() {
     setup: ['Kurulum gerekli', C.error || 'Sunucu adresi ve token gir', I.link],
   }[C.status];
   const sameOrigin = !ON_PAGES;
-  return `<div class="head"><span class="brand">${I.link}</span><span class="ht"><h1>Bağlantı</h1><span class="sub">Bilgisayardaki Ada</span></span></div>
+  return `<div class="head"><span class="brand">${I.link}</span><span class="ht"><h1>Bağlantı</h1><span class="sub">Bilgisayardaki DevBar</span></span></div>
     <div class="status ${C.status}"><span class="si">${info[2]}</span><span class="st"><b>${info[0]}</b><span>${esc(info[1])}</span></span></div>
     <form id="connf">
       <div class="field"><label for="f-server">Sunucu adresi</label>
-        <input id="f-server" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(C.base)}" placeholder="${sameOrigin ? 'Boş: bu sayfayı sunan Ada' : 'https://bilgisayarin.tailnet.ts.net'}">
-        <small>${sameOrigin ? 'Evde boş bırak. Başka bir adresten bağlanacaksan yaz.' : 'Ada\'ya ulaşan HTTPS adres (ör. Tailscale serve).'}</small></div>
+        <input id="f-server" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(C.base)}" placeholder="${sameOrigin ? 'Boş: bu sayfayı sunan DevBar' : 'https://bilgisayarin.tailnet.ts.net'}">
+        <small>${sameOrigin ? 'Evde boş bırak. Başka bir adresten bağlanacaksan yaz.' : 'DevBar\'a ulaşan HTTPS adres (ör. Tailscale serve).'}</small></div>
       <div class="field"><label for="f-token">Token</label>
         <input id="f-token" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(C.token)}" placeholder="QR ile otomatik gelir">
-        <small>Bilgisayardaki Ada → Ayarlar → Telefon erişimi. QR'ı okutunca kendiliğinden dolar.</small></div>
+        <small>Bilgisayardaki DevBar → Ayarlar → Telefon erişimi. QR'ı okutunca kendiliğinden dolar.</small></div>
       <div class="btns"><button class="primary" type="submit">${I.check}<span>Kaydet ve bağlan</span></button>
         ${C.token ? `<button class="ghost" type="button" data-act="forget">${I.trash}<span>Unut</span></button>` : ''}</div>
     </form>
     <div class="help"><h4>${I.home}Evde</h4><ol>
-      <li>Bilgisayarda Ada'yı aç: Ayarlar → <b>Telefon erişimi</b>.</li>
+      <li>Bilgisayarda DevBar'ı aç: Ayarlar → <b>Telefon erişimi</b>.</li>
       <li>QR kodu telefonun kamerasıyla okut, açılan sayfayı ana ekrana ekle.</li>
       <li>Telefon ve bilgisayar aynı Wi-Fi'da olmalı.</li></ol></div>
     <div class="help"><h4>${I.globe}Dışarıda</h4>
-      <p>Bilgisayarda Tailscale varsa <code>tailscale serve --bg 47822</code> ile Ada'yı tailnet'ine HTTPS olarak aç. Sonra bu uygulamanın GitHub Pages kopyasında sunucu adresine o adresi, token'a QR'daki token'ı yaz.</p></div>`;
+      <p>Bilgisayarda Tailscale varsa <code>tailscale serve --bg 47822</code> ile DevBar'ı tailnet'ine HTTPS olarak aç. Sonra bu uygulamanın GitHub Pages kopyasında sunucu adresine o adresi, token'a QR'daki token'ı yaz.</p></div>`;
 }
 
 // ---------- Ana çizim ----------

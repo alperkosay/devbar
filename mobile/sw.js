@@ -1,5 +1,5 @@
-// Ada PWA service worker: sadece uygulama kabuğunu önbelleğe alır, /api isteklerine hiç dokunmaz.
-// Önce ağ, olmazsa önbellek: Ada güncellenince telefon yeni dosyaları hemen alır, bağlantı
+// DevBar PWA service worker: sadece uygulama kabuğunu önbelleğe alır, /api isteklerine hiç dokunmaz.
+// Önce ağ, olmazsa önbellek: DevBar güncellenince telefon yeni dosyaları hemen alır, bağlantı
 // yokken de uygulama açılıp "bağlantı yok" durumunu gösterebilir.
 // Not: Service worker yalnızca HTTPS'te (GitHub Pages, Tailscale) çalışır; evdeki http adreste
 // tarayıcı kaydetmez, uygulama yine de çalışır.

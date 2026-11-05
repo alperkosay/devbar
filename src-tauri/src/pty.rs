@@ -51,7 +51,7 @@ pub fn spawn(app: &AppHandle, st: &Shared, id: &str, cwd: &str, args: Vec<String
     cmd.cwd(cwd);
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
-    // Ada bir Claude oturumunun içinden başlatıldıysa oturuma özel değişkenler sızmasın;
+    // DevBar bir Claude oturumunun içinden başlatıldıysa oturuma özel değişkenler sızmasın;
     // yoksa yeni claude kendini alt oturum sanıp transcript kaydetmiyor.
     for key in [
         "CLAUDECODE",

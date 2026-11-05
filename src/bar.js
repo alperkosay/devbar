@@ -1,4 +1,4 @@
-// Üstteki durum barı. Solda Ada menüsü ve geliştirici göstergeleri (portlar, Docker, git,
+// Üstteki durum barı. Solda DevBar menüsü ve geliştirici göstergeleri (portlar, Docker, git,
 // CPU/RAM), ortada en acil oturum, sağda tüm oturumlar. Her öğeye tıklayınca bardan aşağı
 // bir çekmece açılır. Hatırlatıcılar ve "uzun iş bitti" bildirimleri de buradan gider.
 const notch = $('notch');
@@ -68,7 +68,7 @@ function render() {
   } else {
     const ic = p.kind === 'running' ? '<span class="spin"></span>' : `<span class="ic ${p.kind}">${p.kind === 'waiting' ? I.bell : I.check}</span>`;
     const more = p.extra > 0 ? `<span class="more">+${p.extra}</span>` : '';
-    notch.innerHTML = `${ic}<span class="txt"><b>${esc(p.a.project)}</b><span>${esc(p.a.activity)}</span></span>${more}`;
+    notch.innerHTML = `${ic}<span class="txt"><b>${esc(nameOf(p.a))}</b><span>${esc(p.a.activity)}</span></span>${more}`;
   }
   notch.dataset.sid = p.a?.sessionId || '';
 
@@ -76,7 +76,7 @@ function render() {
     .slice(0, 8)
     .map(
       (a) =>
-        `<button class="chip ${a.status}" data-sid="${esc(a.sessionId)}" data-key="session:${esc(a.sessionId)}" title="${esc(a.cwd)}\n${esc(a.activity)}"><span class="dot ${a.status}"></span><b>${esc(a.project)}</b></button>`,
+        `<button class="chip ${a.status}" data-sid="${esc(a.sessionId)}" data-key="session:${esc(a.sessionId)}" title="${esc(a.cwd)}\n${esc(a.activity)}"><span class="dot ${a.status}"></span><b>${esc(nameOf(a))}</b></button>`,
     )
     .join('');
   notch.dataset.key = p.a ? `session:${p.a.sessionId}` : 'menu:';
@@ -109,7 +109,7 @@ function setLayout(bar) {
 }
 
 // ---------- Tıklamalar ----------
-$('brand').innerHTML = `${I.spark}<span>Ada</span>${I.down}`;
+$('brand').innerHTML = `${I.spark}<span>DevBar</span>${I.down}`;
 $('brand').addEventListener('click', (e) => openSheet('menu', null, e.currentTarget));
 $('brand').addEventListener('dblclick', () => invoke('open_app', { target: null }));
 indsEl.addEventListener('click', (e) => {
@@ -145,10 +145,10 @@ function onAgent(a, prev) {
     const started = runStart.get(a.sessionId);
     if (a.status === 'done' && started && Date.now() - started > LONG_RUN) {
       const min = Math.round((Date.now() - started) / 60000);
-      invoke('notify', { title: `${a.project} bitti`, body: `${min} dakika sürdü${a.prompt ? ': ' + a.prompt : ''}` });
+      invoke('notify', { title: `${nameOf(a)} bitti`, body: `${min} dakika sürdü${a.prompt ? ': ' + a.prompt : ''}` });
     }
     if (a.status === 'waiting') {
-      invoke('notify', { title: `${a.project} seni bekliyor`, body: a.activity || 'İzin ya da cevap bekliyor' });
+      invoke('notify', { title: `${nameOf(a)} seni bekliyor`, body: a.activity || 'İzin ya da cevap bekliyor' });
     }
     if (a.status !== 'running') runStart.delete(a.sessionId);
   }

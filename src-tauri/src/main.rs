@@ -1,4 +1,4 @@
-// Ada: Claude Code oturumları için üstte durum barı ve oturumları yöneten ana pencere.
+// DevBar: Claude Code oturumları için üstte durum barı ve oturumları yöneten ana pencere.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod hooks;
@@ -33,6 +33,8 @@ pub struct AppState {
     pub pop: Mutex<(String, Option<std::time::Instant>, f64)>,
     /// Portlar, CPU/RAM, süreçler.
     pub mon: sysmon::Mon,
+    /// DevBar dışındaki oturumlara verilen adlar (session id -> ad).
+    pub names: Mutex<HashMap<String, String>>,
     /// Ana monitör, fiziksel piksel: x, y, w, h.
     pub monitor: Mutex<(i32, i32, i32, i32)>,
     pub dir: PathBuf,
@@ -84,7 +86,7 @@ pub fn create_tab(app: &AppHandle, st: &Shared, cwd: Option<String>) -> Result<T
 }
 
 /// `resume` verilirse sekme o Claude oturumuna `--resume` ile bağlanır (dışarıda açılmış
-/// bir oturuma Ada'dan devam etmek için).
+/// bir oturuma DevBar'dan devam etmek için).
 pub fn create_tab_with(app: &AppHandle, st: &Shared, cwd: Option<String>, resume: Option<String>) -> Result<Tab, String> {
     let dir = cwd.filter(|c| !c.trim().is_empty()).unwrap_or_else(|| st.settings.lock().unwrap().cwd.clone());
     if !Path::new(&dir).is_dir() {
@@ -191,6 +193,47 @@ fn tab_close(app: AppHandle, st: State<'_, Shared>, id: String) {
     }
     st.hub.forget(&id);
     st.hub.send("tab-remove", &id);
+}
+
+/// Oturumu yeniden adlandırır. `target`: sekme id'si ya da (DevBar dışı oturumda) session id.
+/// Boş ad, adı kaldırır ve klasör adına döner.
+#[tauri::command]
+fn rename(app: AppHandle, st: State<'_, Shared>, target: String, name: String) {
+    let name = store::truncate(name.trim(), 40);
+    let tab = {
+        let mut tabs = st.tabs.lock().unwrap();
+        tabs.iter_mut().find(|t| t.id == target).map(|t| {
+            t.name = name.clone();
+            t.clone()
+        })
+    };
+    if let Some(t) = &tab {
+        save_tabs(&st);
+        emit(&app, &st, "tab", t.clone());
+    } else {
+        let mut names = st.names.lock().unwrap();
+        if name.is_empty() {
+            names.remove(&target);
+        } else {
+            names.insert(target.clone(), name.clone());
+        }
+        store::save(&st.dir.join("names.json"), &*names);
+    }
+    // Bağlı oturumların görünen adını güncelle.
+    let changed: Vec<hooks::Agent> = {
+        let mut agents = st.agents.lock().unwrap();
+        agents
+            .values_mut()
+            .filter(|a| a.session_id == target || a.tab.as_deref() == Some(&target))
+            .map(|a| {
+                a.name = name.clone();
+                a.clone()
+            })
+            .collect()
+    };
+    for a in changed {
+        emit(&app, &st, "agent", a);
+    }
 }
 
 #[tauri::command]
@@ -519,18 +562,18 @@ fn poller(app: AppHandle, st: Shared) {
     });
 }
 
-/// Sağ alttaki sistem tepsisinde Ada ikonu: sol tık paneli açar/kapatır, sağ tık menü.
+/// Sağ alttaki sistem tepsisinde DevBar ikonu: sol tık paneli açar/kapatır, sağ tık menü.
 fn tray(app: &tauri::App) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
-    let toggle = MenuItem::with_id(app, "toggle", "Ada'yı aç", true, Some("Ctrl+Alt+Space"))?;
+    let toggle = MenuItem::with_id(app, "toggle", "DevBar'ı aç", true, Some("Ctrl+Alt+Space"))?;
     let settings = MenuItem::with_id(app, "settings", "Ayarlar", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
-    let quit = MenuItem::with_id(app, "quit", "Ada'yı kapat", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "DevBar'ı kapat", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&toggle, &settings, &sep, &quit])?;
 
-    let mut b = TrayIconBuilder::with_id("ada").tooltip("Ada").menu(&menu).show_menu_on_left_click(false);
+    let mut b = TrayIconBuilder::with_id("ada").tooltip("DevBar").menu(&menu).show_menu_on_left_click(false);
     if let Some(icon) = app.default_window_icon() {
         b = b.icon(icon.clone());
     }
@@ -577,6 +620,7 @@ fn main() {
             std::fs::create_dir_all(&dir)?;
             let settings: Settings = store::load(&dir.join("settings.json"));
             let mut tabs: Vec<Tab> = store::load(&dir.join("tabs.json"));
+            let names: HashMap<String, String> = store::load(&dir.join("names.json"));
             for t in tabs.iter_mut() {
                 t.alive = false;
             }
@@ -588,6 +632,7 @@ fn main() {
                 pill: Mutex::new((160.0, 34.0)),
                 pop: Mutex::new((String::new(), None, 440.0)),
                 mon: sysmon::Mon::default(),
+                names: Mutex::new(names),
                 monitor: Mutex::new((0, 0, 0, 0)),
                 dir,
                 hub: remote::Hub::default(),
@@ -649,6 +694,7 @@ fn main() {
             show_pop,
             hide_pop,
             pop_size,
+            rename,
             sys_ports,
             sys_docker,
             sys_git,
@@ -662,7 +708,7 @@ fn main() {
             quit
         ])
         .build(tauri::generate_context!())
-        .expect("Ada başlatılamadı");
+        .expect("DevBar başlatılamadı");
 
     app.run(|app, event| {
         if let RunEvent::Exit = event {

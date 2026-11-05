@@ -1,4 +1,4 @@
-// Claude Code hook'larından gelen olaylarla tüm oturumların (Ada içi ve dışı) durumunu tutar.
+// Claude Code hook'larından gelen olaylarla tüm oturumların (DevBar içi ve dışı) durumunu tutar.
 use crate::store::{folder_name, norm_path, now, truncate};
 use crate::{save_tabs, Shared};
 use serde::{Deserialize, Serialize};
@@ -24,8 +24,20 @@ pub struct Agent {
     pub prompt: String,
     pub updated: u64,
     pub unread: bool,
-    /// Ada sekmesiyse sekme id'si.
+    /// DevBar sekmesiyse sekme id'si.
     pub tab: Option<String>,
+    /// Kullanıcının verdiği ad (sekme adı ya da dış oturuma verilen ad); boşsa proje adı.
+    pub name: String,
+}
+
+/// Oturumun görünen adı: DevBar sekmesiyse sekmenin adı, değilse dış oturuma verilmiş ad.
+pub fn name_for(st: &Shared, sid: &str, tab: Option<&str>) -> String {
+    if let Some(t) = tab {
+        if let Some(n) = st.tabs.lock().unwrap().iter().find(|x| x.id == t).map(|x| x.name.clone()) {
+            return n;
+        }
+    }
+    st.names.lock().unwrap().get(sid).cloned().unwrap_or_default()
 }
 
 pub fn serve(app: AppHandle, st: Shared) {
@@ -79,6 +91,7 @@ fn handle(app: &AppHandle, st: &Shared, v: &Value) {
             a.project = folder_name(&cwd);
             a.cwd = cwd;
         }
+        a.name = name_for(st, sid, tab.as_deref());
         a.tab = tab;
 
         match event {
@@ -147,7 +160,7 @@ fn handle(app: &AppHandle, st: &Shared, v: &Value) {
     crate::emit(app, st, "agent", agent);
 }
 
-/// Hook'un geldiği oturumu bir Ada sekmesine bağlar: önce session id ile, olmazsa aynı
+/// Hook'un geldiği oturumu bir DevBar sekmesine bağlar: önce session id ile, olmazsa aynı
 /// klasörde yeni başlamış (ya da /clear yapılmış tek) sekmeyle.
 fn link_tab(st: &Shared, sid: &str, cwd: &str, source: &str) -> Option<String> {
     let mut tabs = st.tabs.lock().unwrap();
@@ -231,7 +244,7 @@ fn settings_path() -> PathBuf {
 }
 
 fn command() -> String {
-    // Ada kapalıyken curl anında düşer; `|| exit 0` hem bash'te hem cmd'de hatayı yutar.
+    // DevBar kapalıyken curl anında düşer; `|| exit 0` hem bash'te hem cmd'de hatayı yutar.
     format!("curl -s --max-time 1 -X POST -H \"Content-Type: application/json\" --data-binary @- http://{MARK} || exit 0")
 }
 
@@ -265,8 +278,8 @@ fn entry(event: &str) -> Value {
     entry
 }
 
-/// Ada'nın kendi sekmeleri için `--settings` ile verilen hook dosyası. Global kurulum
-/// yapılmamış olsa da Ada içindeki oturumların durumu görünür.
+/// DevBar'ın kendi sekmeleri için `--settings` ile verilen hook dosyası. Global kurulum
+/// yapılmamış olsa da DevBar içindeki oturumların durumu görünür.
 pub fn session_settings(dir: &std::path::Path) -> Option<PathBuf> {
     let mut hooks = serde_json::Map::new();
     for e in EVENTS {

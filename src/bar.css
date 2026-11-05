@@ -106,7 +106,7 @@ body.float .notch::before {
   pointer-events: none;
 }
 
-/* Sol taraf: Ada menüsü ve geliştirici göstergeleri. */
+/* Sol taraf: DevBar menüsü ve geliştirici göstergeleri. */
 .brand svg:last-child { width: 12px; height: 12px; opacity: 0.6; margin-left: -2px; }
 .inds { display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; }
 .ind {

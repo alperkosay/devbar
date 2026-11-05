@@ -1,4 +1,4 @@
-// Bardan aşağı sarkan çekmece. Görünümler: oturum, Ada menüsü, açık portlar, Docker, git, sistem.
+// Bardan aşağı sarkan çekmece. Görünümler: oturum, DevBar menüsü, açık portlar, Docker, git, sistem.
 // Odak kaybedince kapanır; menüden açılan görünümlerde geri tuşu menüye döner.
 const card = $('card');
 const win = T.window.getCurrentWindow();
@@ -86,7 +86,7 @@ function menuView() {
       </div></div>`,
     )
     .join('');
-  return `${head(I.spark, 'c-accent', 'Ada', `${list.length} oturum${waiting ? ` · ${waiting} seni bekliyor` : ''}`)}
+  return `${head(I.spark, 'c-accent', 'DevBar', `${list.length} oturum${waiting ? ` · ${waiting} seni bekliyor` : ''}`)}
     <div class="tiles">
       ${tile('ports', I.plug, 'c-green', 'Açık portlar', s ? `${s.ports} geliştirme portu` : 'Bakılıyor…')}
       ${tile('docker', I.box, 'c-sky', 'Docker', s?.docker == null ? 'Çalışmıyor' : `${s.docker} container`)}
@@ -104,7 +104,7 @@ function menuView() {
     </div>
     ${toastHtml()}
     <div class="foot">
-      <button class="tool" data-app="open">${I.grid}Ada penceresi</button>
+      <button class="tool" data-app="open">${I.grid}DevBar penceresi</button>
       <button class="tool" data-app="settings">${I.sliders}Ayarlar</button>
       <button class="tool quit" data-app="quit">${I.power}Çıkış</button>
     </div>`;
@@ -245,7 +245,11 @@ function sessionView() {
   const icon = a.status === 'waiting' ? I.bell : a.status === 'running' ? I.wrench : a.status === 'done' ? I.check : I.spark;
   const screen = live ? screenLines() : '';
   return `
-    <div class="hd"><span class="dot ${a.status}"></span><b>${esc(a.project)}</b><span class="pill ${a.status}">${STATUS_LABEL[a.status] || a.status}</span><span class="when">${ago(a.updated)}</span></div>
+    <div class="hd"><span class="dot ${a.status}"></span>${
+       P.editing
+         ? `<input class="rename" id="rename" value="${esc(nameOf(a))}" placeholder="${esc(a.project)}" spellcheck="false">`
+         : `<b>${esc(nameOf(a))}</b><button class="pen" data-rename title="Yeniden adlandır">${I.pen}</button>`
+     }<span class="pill ${a.status}">${STATUS_LABEL[a.status] || a.status}</span><span class="when">${ago(a.updated)}</span></div>
     <div class="sub">${esc(a.cwd)}</div>
     <div class="actline ${a.status}">${icon}<span>${esc(a.activity || '—')}</span></div>
     ${a.prompt ? `<div class="prompt">${esc(a.prompt)}</div>` : ''}
@@ -260,7 +264,7 @@ function sessionView() {
     }
     ${live ? `<div class="reply"><input id="reply" placeholder="Hızlı yanıt yaz, Enter ile gönder" spellcheck="false"><button id="send" title="Gönder">${I.up}</button></div>` : ''}
     <div class="ft">
-      <span class="note">${tab ? (live ? 'Ada oturumu' : 'Ada oturumu · kapalı') : 'Terminal ya da VS Code oturumu, buradan sadece izlenir'}</span>
+      <span class="note">${tab ? (live ? 'DevBar oturumu' : 'DevBar oturumu · kapalı') : 'Terminal ya da VS Code oturumu, buradan sadece izlenir'}</span>
       <button class="open" data-app="open-session">${I.grid}Pencerede aç</button>
     </div>`;
 }
@@ -269,8 +273,8 @@ function sessionView() {
 const VIEWS = { menu: menuView, ports: portsView, docker: dockerView, git: gitView, sys: sysView, session: sessionView };
 
 function render() {
-  // Yanıt yazılırken oturum kartını baştan çizme.
-  const typing = document.activeElement?.id === 'reply' && document.activeElement.value;
+  // Yanıt ya da ad yazılırken oturum kartını baştan çizme.
+  const typing = (document.activeElement?.id === 'reply' && document.activeElement.value) || (P.editing && document.activeElement?.id === 'rename');
   if (typing) return;
   card.innerHTML = (VIEWS[P.kind] || menuView)();
   fit();
@@ -354,9 +358,24 @@ async function copy(text, label) {
 }
 
 // ---------- Tıklamalar ----------
+function saveName(value) {
+  const a = agent();
+  P.editing = false;
+  if (a) invoke('rename', { target: a.tab || a.sessionId, name: value });
+  render();
+}
+
 card.addEventListener('click', async (e) => {
   const t = (sel) => e.target.closest(sel);
   let el;
+  if (t('[data-rename]')) {
+    P.editing = true;
+    render();
+    const inp = $('rename');
+    inp?.focus();
+    inp?.select();
+    return;
+  }
   if ((el = t('[data-nav]'))) return go(el.dataset.nav, el.dataset.nav !== 'menu');
   if ((el = t('[data-refresh]'))) return load(el.dataset.refresh);
   if ((el = t('[data-toggle="system"]'))) {
@@ -422,13 +441,22 @@ card.addEventListener('click', async (e) => {
   }
 });
 card.addEventListener('keydown', (e) => {
+  if (e.target.id === 'rename') {
+    if (e.key === 'Enter') saveName(e.target.value);
+    else if (e.key === 'Escape') {
+      e.stopPropagation();
+      P.editing = false;
+      render();
+    }
+    return;
+  }
   if (e.target.id === 'reply' && e.key === 'Enter' && !e.isComposing) {
     sendText(e.target.value);
     e.target.value = '';
   }
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') hide();
+  if (e.key === 'Escape' && !P.editing) hide();
 });
 win.onFocusChanged(({ payload: focused }) => {
   if (!focused) hide();
@@ -442,6 +470,7 @@ T.event.listen('pop-show', async ({ payload }) => {
   P.tabs = st.tabs;
   P.settings = st.settings;
   P.id = payload.id;
+  P.editing = false;
   if (payload.kind === 'session') await attachTerm(tabOf(agent()));
   go(payload.kind, false);
   void card.offsetWidth;
