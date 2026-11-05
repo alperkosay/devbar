@@ -366,7 +366,7 @@ fn apply_theme(app: &AppHandle, st: &Shared) {
     };
     for w in bar_windows(app) {
         if theme == "liquid" && bar {
-            let _ = w.set_effects(EffectsBuilder::new().effect(Effect::Acrylic).color(Color(14, 14, 16, 110)).build());
+            let _ = w.set_effects(EffectsBuilder::new().effect(Effect::Acrylic).color(Color(18, 18, 22, 55)).build());
         } else {
             let _ = w.set_effects(None::<tauri::utils::config::WindowEffectsConfig>);
         }

@@ -42,117 +42,153 @@
 }
 
 /* ---------- Bar temaları ----------
-   Bar ve çekmece bu değişkenleri kullanır. data-theme: gece (varsayılan) | liquid | light | ocean */
+   Bar ve çekmece bu değişkenleri kullanır.
+   data-theme: gece (Obsidyen, varsayılan) | liquid | aurora | latte | sunset */
 body {
-  --bar-bg: #16161b;
-  --bar-line: rgba(255, 255, 255, 0.05);
-  --bar-hover: rgba(255, 255, 255, 0.08);
-  --tab-a: #26262f;
-  --tab-b: #1c1c23;
-  --tab-ha: #2e2e38;
-  --tab-hb: #22222a;
-  --sheet: #1d1d24;
-  --row: #23232b;
-  --row2: #2a2a33;
+  --bar-bg: linear-gradient(180deg, #18181d 0%, #111115 100%);
+  --bar-line: rgba(255, 255, 255, 0.06);
+  --bar-glow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --bar-hover: rgba(255, 255, 255, 0.07);
+  --tab-a: #26262e;
+  --tab-b: #18181e;
+  --tab-ha: #2e2e37;
+  --tab-hb: #1e1e25;
+  --sheet: #18181e;
+  --row: #202027;
+  --row2: #282830;
   --screen-fg: #c9c9d1;
   --on-accent: #1a0d07;
-  --waiting-text: #fde68a;
+  --waiting-text: #fcd34d;
   --running-text: #93c5fd;
+  --text-shadow: none;
+  --sw: linear-gradient(135deg, #2a2a33, #0b0b0e);
 }
 
-/* Liquid: siyah-beyaz cam. Barın arkasında Windows akrilik bulanıklığı açılır. */
+/* Liquid Glass: siyah-beyaz cam. Barın arkasında Windows akrilik bulanıklığı. */
 body[data-theme="liquid"] {
-  --bar-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04));
-  --bar-line: rgba(255, 255, 255, 0.2);
-  --bar-hover: rgba(255, 255, 255, 0.14);
-  --tab-a: rgba(255, 255, 255, 0.2);
-  --tab-b: rgba(255, 255, 255, 0.07);
-  --tab-ha: rgba(255, 255, 255, 0.28);
-  --tab-hb: rgba(255, 255, 255, 0.1);
-  --sheet: linear-gradient(180deg, rgba(44, 44, 48, 0.96), rgba(18, 18, 20, 0.97));
-  --row: rgba(255, 255, 255, 0.06);
-  --row2: rgba(255, 255, 255, 0.11);
-  --bg: rgba(0, 0, 0, 0.45);
-  --bg2: rgba(255, 255, 255, 0.06);
-  --bg3: rgba(255, 255, 255, 0.1);
-  --line: rgba(255, 255, 255, 0.12);
-  --line2: rgba(255, 255, 255, 0.2);
+  --bar-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.07) 100%);
+  --bar-line: rgba(255, 255, 255, 0.28);
+  --bar-glow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  --bar-hover: rgba(255, 255, 255, 0.16);
+  --tab-a: rgba(255, 255, 255, 0.3);
+  --tab-b: rgba(255, 255, 255, 0.1);
+  --tab-ha: rgba(255, 255, 255, 0.38);
+  --tab-hb: rgba(255, 255, 255, 0.14);
+  --sheet: linear-gradient(180deg, rgba(58, 58, 64, 0.94) 0%, rgba(22, 22, 25, 0.96) 100%);
+  --row: rgba(255, 255, 255, 0.07);
+  --row2: rgba(255, 255, 255, 0.13);
+  --bg: rgba(0, 0, 0, 0.4);
+  --bg2: rgba(255, 255, 255, 0.07);
+  --bg3: rgba(255, 255, 255, 0.12);
+  --line: rgba(255, 255, 255, 0.14);
+  --line2: rgba(255, 255, 255, 0.24);
   --text: #ffffff;
-  --soft: #e4e4e7;
-  --muted: #d4d4d8;
-  --dim: #b4b4bc;
+  --soft: #f4f4f5;
+  --muted: #e4e4e7;
+  --dim: #c4c4cc;
   --accent: #ffffff;
   --blue: #ffffff;
   --amber: #ffffff;
-  --green: #d4d4d8;
-  --red: #fafafa;
-  --sky: #e4e4e7;
-  --pink: #e4e4e7;
-  --teal: #e4e4e7;
+  --green: #e4e4e7;
+  --red: #ffffff;
+  --sky: #f4f4f5;
+  --pink: #f4f4f5;
+  --teal: #f4f4f5;
   --on-accent: #000000;
   --waiting-text: #ffffff;
-  --running-text: #e4e4e7;
-  --screen-fg: #e4e4e7;
+  --running-text: #f4f4f5;
+  --screen-fg: #ececef;
+  --text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
-/* Açık: beyaz bar, koyu yazı. */
-body[data-theme="light"] {
-  --bar-bg: #f4f4f6;
-  --bar-line: rgba(0, 0, 0, 0.08);
-  --bar-hover: rgba(0, 0, 0, 0.06);
-  --tab-a: #ffffff;
-  --tab-b: #e9e9ee;
+/* Aurora: koyu petrol mavisi, nane vurgu. */
+body[data-theme="aurora"] {
+  --bar-bg: linear-gradient(90deg, #0a1c22 0%, #0c1a28 55%, #0f1830 100%);
+  --bar-line: rgba(94, 234, 212, 0.12);
+  --bar-glow: inset 0 1px 0 rgba(94, 234, 212, 0.08);
+  --bar-hover: rgba(94, 234, 212, 0.1);
+  --tab-a: #12333a;
+  --tab-b: #0c2229;
+  --tab-ha: #164049;
+  --tab-hb: #0f2a32;
+  --sheet: #0d1f27;
+  --row: #12292f;
+  --row2: #173339;
+  --bg: #071419;
+  --bg2: #0d2129;
+  --bg3: #132b33;
+  --line: rgba(94, 234, 212, 0.1);
+  --line2: rgba(94, 234, 212, 0.18);
+  --text: #e8fffa;
+  --soft: #c5ece6;
+  --muted: #86b3ad;
+  --dim: #5c8580;
+  --accent: #5eead4;
+  --on-accent: #042a24;
+  --screen-fg: #cdeee9;
+}
+
+/* Latte: sıcak krem, kiremit vurgu. */
+body[data-theme="latte"] {
+  --bar-bg: linear-gradient(180deg, #f7f1e8 0%, #efe6da 100%);
+  --bar-line: rgba(90, 60, 30, 0.12);
+  --bar-glow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --bar-hover: rgba(90, 60, 30, 0.07);
+  --tab-a: #fffdf9;
+  --tab-b: #f1e7da;
   --tab-ha: #ffffff;
-  --tab-hb: #f1f1f5;
-  --sheet: #ffffff;
-  --row: #f4f4f7;
-  --row2: #eaeaef;
-  --bg: #f7f7f9;
-  --bg2: #f1f1f4;
-  --bg3: #e8e8ed;
-  --line: rgba(0, 0, 0, 0.08);
-  --line2: rgba(0, 0, 0, 0.14);
-  --text: #18181b;
-  --soft: #3f3f46;
-  --muted: #6b6b76;
-  --dim: #9a9aa6;
-  --accent: #d9653b;
-  --blue: #2563eb;
-  --amber: #d97706;
-  --green: #16a34a;
-  --red: #dc2626;
-  --sky: #0284c7;
-  --pink: #db2777;
-  --teal: #0d9488;
+  --tab-hb: #f6eee3;
+  --sheet: #fbf8f3;
+  --row: #f3ece2;
+  --row2: #ebe1d4;
+  --bg: #f6f0e7;
+  --bg2: #f3ece2;
+  --bg3: #e9dfd1;
+  --line: rgba(90, 60, 30, 0.1);
+  --line2: rgba(90, 60, 30, 0.17);
+  --text: #2f241f;
+  --soft: #4a3b33;
+  --muted: #7a6a60;
+  --dim: #a8988d;
+  --accent: #c2541f;
+  --blue: #2f6fd6;
+  --amber: #c27b0a;
+  --green: #2f8f4e;
+  --red: #c0392b;
+  --sky: #1f7fb0;
+  --pink: #c0466e;
+  --teal: #1f8a7d;
   --on-accent: #ffffff;
-  --waiting-text: #b45309;
-  --running-text: #1d4ed8;
-  --screen-fg: #27272a;
+  --waiting-text: #a15c00;
+  --running-text: #2559b0;
+  --screen-fg: #3a2e28;
 }
 
-/* Okyanus: lacivert, camgöbeği vurgu. */
-body[data-theme="ocean"] {
-  --bar-bg: #0a1628;
-  --bar-line: rgba(148, 197, 255, 0.1);
-  --bar-hover: rgba(148, 197, 255, 0.1);
-  --tab-a: #17305a;
-  --tab-b: #0f2142;
-  --tab-ha: #1d3a6b;
-  --tab-hb: #13284e;
-  --sheet: #0f1f3a;
-  --row: #152a4c;
-  --row2: #1b345c;
-  --bg: #081222;
-  --bg2: #0e1d38;
-  --bg3: #15294a;
-  --line: rgba(148, 197, 255, 0.1);
-  --line2: rgba(148, 197, 255, 0.18);
-  --text: #e8f1ff;
-  --soft: #c7d7f0;
-  --muted: #8aa4c8;
-  --dim: #5b7396;
-  --accent: #38bdf8;
-  --on-accent: #04202e;
+/* Gün batımı: sıcak koyu kahve, turuncu vurgu. */
+body[data-theme="sunset"] {
+  --bar-bg: linear-gradient(90deg, #17110e 0%, #221510 55%, #2a1711 100%);
+  --bar-line: rgba(251, 146, 60, 0.14);
+  --bar-glow: inset 0 1px 0 rgba(251, 146, 60, 0.08);
+  --bar-hover: rgba(251, 146, 60, 0.1);
+  --tab-a: #3a2218;
+  --tab-b: #241510;
+  --tab-ha: #45291d;
+  --tab-hb: #2c1a13;
+  --sheet: #1e1511;
+  --row: #291c16;
+  --row2: #33231b;
+  --bg: #140d0a;
+  --bg2: #241812;
+  --bg3: #2f2018;
+  --line: rgba(251, 146, 60, 0.12);
+  --line2: rgba(251, 146, 60, 0.2);
+  --text: #fff4ec;
+  --soft: #f3dccd;
+  --muted: #c9a896;
+  --dim: #8f7262;
+  --accent: #fb923c;
+  --on-accent: #2a1205;
+  --screen-fg: #f1dccf;
 }
 
 * { box-sizing: border-box; }

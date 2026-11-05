@@ -1,10 +1,9 @@
-// DevBar ana penceresi: solda oturumlar (DevBar'dakiler ve dışarıdakiler), sağda seçili oturumun
-// gerçek terminali ve altta mesaj kutusu. Yeni oturum, dış oturum ayrıntısı ve ayarlar da burada.
-const termsEl = $('terms');
-const viewEl = $('view');
-const bodyEl = $('body');
-const composer = $('composer');
-const input = $('input');
+// DevBar ana penceresi: bütün oturumlar ekrana döşenmiş, yan yana açık. Her panelde gerçek
+// Claude Code terminali. Üstte ince araç çubuğu; ayarlar, yeni oturum ve diğer oturumlar
+// panellerin üstünde açılan pencerede.
+const gridEl = $('grid');
+const overlay = $('overlay');
+const modal = $('modal');
 
 const S = {
   settings: { cwd: '', permissionMode: '', model: '', bar: true, recent: [], reminders: [] },
@@ -12,145 +11,195 @@ const S = {
   agents: new Map(), // sessionId -> oturum
   hooks: false,
   remote: null,
-  view: 'new', // term | new | ext | settings
-  selected: null, // sekme id (term görünümü)
-  ext: null, // dış oturum session id (ext görünümü)
+  active: null, // odaktaki panel (sekme id)
+  zoom: null, // tek başına büyütülmüş panel
+  modal: null, // new | others | ext | settings
+  ext: null, // dış oturum session id
+  renaming: null, // adı düzenlenen sekme id
+  closing: null, // kapatma onayı bekleyen sekme id
 };
 
-const curTab = () => S.tabs.find((t) => t.id === S.selected) || null;
 const tabName = (t) => t.name || folderName(t.cwd);
 const tabAgent = (tabId) => [...S.agents.values()].find((a) => a.tab === tabId) || null;
 const tabStatus = (t) => (t.alive ? tabAgent(t.id)?.status || 'idle' : 'off');
+const others = () => sortedAgents(S.agents).filter((a) => !a.tab);
 
-// ---------- Çizim ----------
-function renderAll() {
-  renderSide();
-  renderHead();
-  renderBody();
+// ---------- Paneller ----------
+const panes = new Map(); // sekme id -> { el, head, body, cover }
+
+function ensurePane(tab) {
+  if (panes.has(tab.id)) return panes.get(tab.id);
+  const el = document.createElement('section');
+  el.className = 'pane';
+  el.dataset.pane = tab.id;
+  el.innerHTML = `<div class="ph"></div><div class="pb"></div><div class="cover" hidden></div>`;
+  const p = { el, head: el.querySelector('.ph'), body: el.querySelector('.pb'), cover: el.querySelector('.cover') };
+  panes.set(tab.id, p);
+  gridEl.appendChild(el);
+  return p;
 }
 
-function renderSide() {
-  const tabs = S.tabs
-    .map((t) => {
-      const a = tabAgent(t.id);
-      const st = tabStatus(t);
-      const sub = !t.alive ? (t.used ? 'Kapalı · devam edebilirsin' : 'Kapalı') : a?.activity || 'Hazır';
-      const cls = [st, S.view === 'term' && S.selected === t.id ? 'active' : '', a?.unread ? 'unread' : ''].join(' ');
-      return `<button class="item ${cls}" data-tab="${t.id}" title="${esc(t.cwd)}${a?.prompt ? '\n' + esc(a.prompt) : ''}">
-        <span class="dot ${st}"></span><span class="it"><b>${esc(tabName(t))}</b><span>${esc(sub)}</span></span>
-        <span class="x" data-close="${t.id}" title="Oturumu kapat">${I.x}</span></button>`;
-    })
-    .join('');
-  $('tablist').innerHTML =
-    tabs || `<div class="empty-side">Henüz oturum yok. <button data-act="new">Yeni oturum aç</button></div>`;
-
-  const ext = sortedAgents(S.agents).filter((a) => !a.tab);
-  $('extlist').innerHTML = ext.length
-    ? ext
-        .map(
-          (a) => `<button class="item ${a.status} ${S.view === 'ext' && S.ext === a.sessionId ? 'active' : ''}" data-sid="${esc(a.sessionId)}" title="${esc(a.cwd)}">
-        <span class="dot ${a.status}"></span><span class="it"><b>${esc(nameOf(a))}</b><span>${esc(a.activity)}</span></span>
-        <span class="when">${ago(a.updated)}</span></button>`,
-        )
-        .join('')
-    : S.hooks
-      ? `<div class="empty-side">Terminalde açık Claude oturumların bir sonraki mesajda burada görünür.</div>`
-      : `<div class="empty-side">Terminal ve VS Code oturumlarını da görmek için <button data-act="go-settings">hook'ları kur</button>.</div>`;
-
-  $('btn-new').classList.toggle('active', S.view === 'new');
-  $('btn-settings').classList.toggle('active', S.view === 'settings');
-  $('phone-ind').innerHTML = S.remote?.on ? `${I.phone}Telefon açık` : '';
+// Panel sayısına göre ızgara: 1, 2, 3 yan yana; 4 = 2x2; 5-6 = 3x2; 7-9 = 3x3; fazlası 4 sütun.
+function gridSize(n) {
+  const cols = n <= 1 ? 1 : n === 2 ? 2 : n === 3 ? 3 : n === 4 ? 2 : n <= 9 ? 3 : 4;
+  return { cols, rows: Math.max(1, Math.ceil(n / cols)) };
 }
 
-function renderHead() {
-  let html = '';
-  if (S.view === 'term' && curTab()) {
-    const t = curTab();
-    const a = tabAgent(t.id);
-    const st = tabStatus(t);
-    html = `<div class="mh-main"><div class="mh-title"><span class="dot ${st}"></span>${titleHtml(tabName(t), folderName(t.cwd))}<span class="pill ${st}">${STATUS_LABEL[st]}</span></div>
-      <div class="mh-sub">${esc(t.cwd)}${a?.activity && t.alive ? ' · ' + esc(a.activity) : ''}</div></div>
-      <div class="mh-actions"><button class="mini danger" data-act="close-tab">${I.x}<span>Oturumu kapat</span></button></div>`;
-  } else if (S.view === 'ext') {
-    const a = S.agents.get(S.ext);
-    html = a
-      ? `<div class="mh-main"><div class="mh-title"><span class="dot ${a.status}"></span>${titleHtml(nameOf(a), a.project)}<span class="pill ${a.status}">${STATUS_LABEL[a.status] || a.status}</span></div>
-        <div class="mh-sub">${esc(a.cwd)} · DevBar dışında çalışıyor</div></div>`
-      : '';
-  } else if (S.view === 'settings') {
-    html = `<div class="mh-main"><div class="mh-title">${I.sliders}<h2>Ayarlar</h2></div><div class="mh-sub">Tüm ayarlar hemen kaydedilir</div></div>`;
-  } else {
-    html = `<div class="mh-main"><div class="mh-title">${I.spark}<h2>Yeni oturum</h2></div><div class="mh-sub">Bir klasör seç, içinde Claude Code açılır</div></div>`;
-  }
-  $('mhead').innerHTML = html;
-}
-
-// Başlıkta ad; kaleme basınca (ya da listede çift tıklayınca) yerinde düzenlenir.
-function titleHtml(name, fallback) {
-  if (S.renaming) return `<input class="rename" id="rename" value="${esc(name)}" placeholder="${esc(fallback)}" spellcheck="false">`;
-  return `<h2>${esc(name)}</h2><button class="pen" data-act="rename" title="Yeniden adlandır">${I.pen}</button>`;
-}
-
-function startRename() {
-  S.renaming = true;
-  renderHead();
-  const inp = $('rename');
-  inp?.focus();
-  inp?.select();
-}
-
-function saveRename(value) {
-  S.renaming = false;
-  const target = S.view === 'term' ? S.selected : S.view === 'ext' ? S.ext : null;
-  if (target) {
-    const tab = S.tabs.find((t) => t.id === target);
-    if (tab) tab.name = value.trim();
-    invoke('rename', { target, name: value });
-  }
-  renderAll();
-}
-
-function renderBody() {
-  const tab = S.view === 'term' ? curTab() : null;
-  termsEl.hidden = !tab;
-  for (const [id, t] of terms) t.el.classList.toggle('on', !!tab && id === tab.id);
-  composer.hidden = !(tab && tab.alive);
-  viewEl.className = 'view';
-
-  if (tab) {
-    if (tab.alive) {
-      viewEl.innerHTML = '';
-      requestAnimationFrame(fitActive);
-    } else {
-      viewEl.className = 'view overlay';
-      viewEl.innerHTML = `<div class="closed">
-        <div class="txt"><b>Oturum kapalı</b><span>${tab.used ? 'Konuşma kaydedildi, kaldığın yerden devam edebilirsin.' : 'Henüz başlamadı.'}</span></div>
-        <button class="primary" data-act="resume">${I.play}<span>${tab.used ? 'Devam et' : 'Başlat'}</span></button></div>`;
+function layout() {
+  for (const [id, p] of panes) {
+    if (!S.tabs.some((t) => t.id === id)) {
+      p.el.remove();
+      panes.delete(id);
+      terms.get(id)?.term.dispose();
+      terms.delete(id);
     }
-    return;
   }
-  if (S.view === 'ext') viewEl.innerHTML = extHtml();
-  else if (S.view === 'settings') viewEl.innerHTML = settingsHtml();
-  else viewEl.innerHTML = newHtml();
+  if (S.zoom && !S.tabs.some((t) => t.id === S.zoom)) S.zoom = null;
+  const visible = S.zoom ? S.tabs.filter((t) => t.id === S.zoom) : S.tabs;
+
+  gridEl.querySelector('.welcome')?.remove();
+  S.tabs.forEach((t, i) => {
+    const p = ensurePane(t);
+    if (gridEl.children[i] !== p.el) gridEl.insertBefore(p.el, gridEl.children[i] || null);
+    p.el.hidden = !visible.includes(t);
+    renderPane(t);
+  });
+  if (!S.tabs.length) gridEl.insertAdjacentHTML('beforeend', welcomeHtml());
+
+  const { cols, rows } = gridSize(visible.length || 1);
+  gridEl.style.setProperty('--cols', cols);
+  gridEl.style.setProperty('--rows', rows);
+  // Çok panelde yazı biraz küçülsün ki Claude'un ekranı sığsın.
+  const size = visible.length >= 4 ? 12 : 13;
+  for (const t of terms.values()) if (t.term.options.fontSize !== size) t.term.options.fontSize = size;
+  requestAnimationFrame(fitAll);
+  renderTop();
+}
+
+function renderPane(t) {
+  const p = panes.get(t.id);
+  if (!p) return;
+  const a = tabAgent(t.id);
+  const st = tabStatus(t);
+  p.el.className = `pane ${st} ${S.active === t.id ? 'active' : ''} ${a?.unread ? 'unread' : ''}`;
+  const name =
+    S.renaming === t.id
+      ? `<input class="rename" id="rename" value="${esc(tabName(t))}" placeholder="${esc(folderName(t.cwd))}" spellcheck="false">`
+      : `<b class="pn" title="${esc(t.cwd)}">${esc(tabName(t))}</b>`;
+  const closing = S.closing === t.id;
+  p.head.innerHTML = `<span class="dot ${st}"></span>${name}
+    <span class="ps">${esc(t.alive ? a?.short || a?.activity || 'Hazır' : 'Kapalı')}</span>
+    <span class="pa">
+      <button data-pact="rename" title="Yeniden adlandır">${I.pen}</button>
+      <button data-pact="zoom" title="${S.zoom === t.id ? 'Izgaraya dön' : 'Büyüt'}">${S.zoom === t.id ? I.grid : I.ext}</button>
+      <button data-pact="close" class="${closing ? 'armed' : ''}" title="Oturumu kapat">${closing ? 'Kapatılsın mı?' : I.x}</button>
+    </span>`;
+  p.cover.hidden = t.alive;
+  if (!t.alive)
+    p.cover.innerHTML = `<div class="cv"><b>${t.used ? 'Oturum kapalı' : 'Başlamadı'}</b><span>${esc(t.cwd)}</span>
+      <button class="primary" data-pact="resume">${I.play}<span>${t.used ? 'Kaldığın yerden devam et' : 'Başlat'}</span></button></div>`;
+  if (S.renaming === t.id) {
+    const inp = $('rename');
+    inp?.focus();
+    inp?.select();
+  }
+}
+
+function renderTop() {
+  const live = S.tabs.filter((t) => t.alive);
+  const count = (k) => S.tabs.filter((t) => t.alive && tabStatus(t) === k).length;
+  const parts = [];
+  if (count('waiting')) parts.push(`<span class="sp waiting"><span class="dot waiting"></span>${count('waiting')} bekliyor</span>`);
+  if (count('running')) parts.push(`<span class="sp"><span class="dot running"></span>${count('running')} çalışıyor</span>`);
+  parts.push(`<span class="sp muted">${S.tabs.length} panel${live.length !== S.tabs.length ? ` · ${S.tabs.length - live.length} kapalı` : ''}</span>`);
+  $('sum').innerHTML = S.tabs.length ? parts.join('') : '';
+  const closed = S.tabs.filter((t) => !t.alive).length;
+  const ext = others().length;
+  $('tbr').innerHTML = `
+    ${closed > 1 ? `<button class="tbtn" data-top="resume-all">${I.play}<span>Hepsini başlat (${closed})</span></button>` : ''}
+    <button class="tbtn" data-top="others" title="Terminal ve VS Code'daki oturumlar">${I.list}<span>Diğer</span>${ext ? `<i>${ext}</i>` : ''}</button>
+    <button class="tbtn go" data-top="new">${I.plus}<span>Yeni oturum</span></button>
+    <button class="tbtn icon" data-top="settings" title="Ayarlar">${I.sliders}</button>`;
+}
+
+function welcomeHtml() {
+  return `<div class="welcome"><div class="big">${I.spark}</div><h2>Henüz oturum yok</h2>
+    <p>Açtığın her Claude oturumu burada yan yana durur. 5-6 projeyi aynı anda görebilirsin.</p>
+    <button class="primary" data-top="new">${I.plus}<span>Yeni oturum</span></button></div>`;
+}
+
+function activate(id, focus = true) {
+  if (!S.tabs.some((t) => t.id === id)) return;
+  const prev = S.active;
+  S.active = id;
+  const a = tabAgent(id);
+  if (a?.unread) {
+    a.unread = false;
+    invoke('agent_read', { id: a.sessionId });
+  }
+  if (prev && prev !== id) renderPane(S.tabs.find((t) => t.id === prev) || {});
+  renderPane(S.tabs.find((t) => t.id === id));
+  if (focus) setTimeout(() => terms.get(id)?.term.focus(), 20);
+}
+
+// ---------- Açılan pencere (ayarlar, yeni oturum, diğer oturumlar) ----------
+async function openModal(kind) {
+  S.modal = kind;
+  if (kind === 'settings') await loadRemote();
+  renderModal();
+  overlay.hidden = false;
+}
+function closeModal() {
+  S.modal = null;
+  overlay.hidden = true;
+  if (S.active) terms.get(S.active)?.term.focus();
+}
+function renderModal() {
+  if (!S.modal) return;
+  const head = (icon, title, sub, back) =>
+    `<div class="mh">${back ? `<button class="mini" data-m="${back}">${I.left}</button>` : ''}<span class="mi">${icon}</span><div class="mt"><h2>${title}</h2><span>${sub}</span></div><button class="mini" data-m="close">${I.x}</button></div>`;
+  let html = '';
+  if (S.modal === 'new') html = head(I.spark, 'Yeni oturum', 'Klasörü seç, yeni panelde Claude Code açılır') + newHtml();
+  else if (S.modal === 'settings') html = head(I.sliders, 'Ayarlar', 'Hepsi hemen kaydedilir') + settingsHtml();
+  else if (S.modal === 'others') html = head(I.list, 'Diğer oturumlar', 'Terminal ve VS Code\'da açık Claude oturumların') + othersHtml();
+  else if (S.modal === 'ext') {
+    const a = S.agents.get(S.ext);
+    html = head(I.eye, esc(a ? nameOf(a) : 'Oturum'), a ? esc(a.cwd) : '', 'others') + extHtml();
+  }
+  modal.innerHTML = html;
 }
 
 function newHtml() {
   const def = S.settings.cwd;
   const seen = new Set([def.toLowerCase()]);
-  const recent = (S.settings.recent || []).filter((r) => !seen.has(r.toLowerCase()) && seen.add(r.toLowerCase())).slice(0, 7);
+  const recent = (S.settings.recent || []).filter((r) => !seen.has(r.toLowerCase()) && seen.add(r.toLowerCase())).slice(0, 8);
   const row = (p, tag) =>
     `<button class="frow" data-cwd="${esc(p)}"><span class="fi">${I.folder}</span><span class="ft"><b>${esc(folderName(p))}</b><span>${esc(p)}</span></span>${tag ? `<span class="tag">${tag}</span>` : ''}</button>`;
   return `<div class="newv">
-    <p>Klasörü seçince içinde gerçek Claude Code açılır: izinler, slash komutlar, MCP, her şey çalışır. Mesajını alttaki kutuya ya da doğrudan terminale yazabilirsin.</p>
     ${row(def, 'Varsayılan')}
     ${recent.map((r) => row(r)).join('')}
     <button class="frow other" data-act="pick-new"><span class="fi">${I.plus}</span><span class="ft"><b>Başka klasör…</b><span>Bilgisayardan seç</span></span></button>
   </div>`;
 }
 
+function othersHtml() {
+  const list = others();
+  if (!list.length)
+    return S.hooks
+      ? `<div class="empty-box"><p>Terminalde açık Claude oturumların bir sonraki mesajda burada görünür.</p></div>`
+      : `<div class="empty-box"><p>Terminal ve VS Code oturumlarını da görmek için hook'ları kur.</p><button class="primary" data-act="hooks-install">${I.link}<span>Hook'ları kur</span></button></div>`;
+  return `<div class="olist">${list
+    .map(
+      (a) => `<button class="orow ${a.status}" data-sid="${esc(a.sessionId)}"><span class="dot ${a.status}"></span>
+        <span class="ot"><b>${esc(nameOf(a))}</b><span>${esc(a.short || a.activity)}${a.prompt ? ' · ' + esc(a.prompt) : ''}</span></span>
+        <span class="when">${ago(a.updated)}</span>${I.right}</button>`,
+    )
+    .join('')}</div>`;
+}
+
 function extHtml() {
   const a = S.agents.get(S.ext);
-  if (!a) return `<div class="empty-box"><div class="big">${I.grid}</div><h4>Oturum kapandı</h4><p>Bu oturum artık açık değil.</p></div>`;
+  if (!a) return `<div class="empty-box"><p>Bu oturum artık açık değil.</p></div>`;
   const live = a.status === 'running' || a.status === 'waiting';
   return `<div class="extv">
     <dl class="facts">
@@ -160,9 +209,8 @@ function extHtml() {
       <dt>Klasör</dt><dd>${esc(a.cwd)}</dd>
       <dt>Son hareket</dt><dd>${ago(a.updated)} önce</dd>
     </dl>
-    <div class="note">${I.eye}<span>Bu oturum DevBar dışında (terminal ya da VS Code) çalışıyor. Buradan izleyebilirsin; yazmak için kendi penceresine geç ya da DevBar'a taşı.</span></div>
     ${live ? `<div class="note warn">${I.alert}<span>Oturum şu an açık. DevBar'da devam edersen iki yerden aynı anda yazma; önce diğer pencerede kapat.</span></div>` : ''}
-    <div><button class="primary" data-act="adopt">${I.play}<span>DevBar'da devam et</span></button></div>
+    <div><button class="primary" data-act="adopt">${I.play}<span>Panel olarak DevBar'da aç</span></button></div>
   </div>`;
 }
 
@@ -192,9 +240,9 @@ function settingsHtml() {
     )
     .join('');
   return `<div class="settings">
-    <div class="row"><div class="lbl"><b>Üst bar</b><span>Status bar ekranın üstünde yer ayırır; yüzen ada sadece küçük bir hap</span></div>
+    <div class="row"><div class="lbl"><b>Üst bar</b><span>Status bar ekranın üstünde yer ayırır; yüzen ada sadece küçük bir sekme</span></div>
       ${seg('bar', [['true', 'Status bar', I.bar], ['false', 'Yüzen ada', I.float]])}</div>
-    <div class="row"><div class="lbl"><b>Bar teması</b><span>Üst bar ve açılan çekmeceler</span></div>
+    <div class="row"><div class="lbl"><b>Bar teması</b><span>${esc((THEMES.find(([k]) => k === (st.theme || 'gece')) || ['', 'Obsidyen'])[1])}</span></div>
       <div class="themes">${THEMES.map(([k, l]) => `<button class="sw ${k} ${(st.theme || 'gece') === k ? 'on' : ''}" data-themepick="${k}" title="${l}"></button>`).join('')}</div></div>
     <div class="row"><div class="lbl"><b>Varsayılan klasör</b><span>Yeni oturum listesinde en üstte</span></div>
       <button class="pathbtn" data-act="pick" title="${esc(st.cwd)}">${I.folder}<span>${esc(st.cwd)}</span></button></div>
@@ -257,10 +305,10 @@ async function loadRemote() {
 let toastTimer;
 function toast(msg) {
   invoke('log', { msg: 'toast: ' + msg });
-  bodyEl.querySelector('.toast')?.remove();
-  bodyEl.insertAdjacentHTML('beforeend', `<div class="toast">${esc(msg)}</div>`);
+  document.querySelector('.toast')?.remove();
+  document.body.insertAdjacentHTML('beforeend', `<div class="toast">${esc(msg)}</div>`);
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => bodyEl.querySelector('.toast')?.remove(), 5000);
+  toastTimer = setTimeout(() => document.querySelector('.toast')?.remove(), 5000);
 }
 
 // ---------- Terminaller ----------
@@ -291,12 +339,13 @@ const XTHEME = {
 
 function ensureTerm(id) {
   if (terms.has(id)) return terms.get(id);
+  const pane = panes.get(id);
   const el = document.createElement('div');
   el.className = 'term';
-  termsEl.appendChild(el);
+  pane.body.appendChild(el);
   const term = new Terminal({
     fontFamily: '"Cascadia Mono", "Cascadia Code", Consolas, monospace',
-    fontSize: 13,
+    fontSize: S.tabs.length >= 4 ? 12 : 13,
     lineHeight: 1.12,
     cursorBlink: true,
     scrollback: 8000,
@@ -326,42 +375,49 @@ function ensureTerm(id) {
     if (e.ctrlKey && e.key.toLowerCase() === 'v') return false;
     return true;
   });
+  // Terminale tıklanınca o panel odaklansın.
+  term.textarea?.addEventListener('focus', () => S.active !== id && activate(id, false));
   const t = { term, fit, el };
   terms.set(id, t);
   return t;
 }
 
-function fitActive() {
-  const t = terms.get(S.selected);
-  if (!t || !t.el.classList.contains('on')) return;
+function fitAll() {
+  for (const [id, t] of terms) {
+    if (panes.get(id)?.el.hidden) continue;
+    try {
+      t.fit.fit();
+    } catch {}
+  }
+}
+let fitTimer;
+new ResizeObserver(() => {
+  clearTimeout(fitTimer);
+  fitTimer = setTimeout(fitAll, 60);
+}).observe(gridEl);
+
+async function startTab(tab) {
+  ensurePane(tab);
+  const t = ensureTerm(tab.id);
+  layout();
+  await new Promise((r) => requestAnimationFrame(r));
   try {
     t.fit.fit();
   } catch {}
-}
-new ResizeObserver(() => fitActive()).observe(termsEl);
-
-async function startTab(tab) {
-  const t = ensureTerm(tab.id);
-  S.selected = tab.id;
-  S.view = 'term';
-  renderAll();
-  t.el.classList.add('on');
-  await new Promise((r) => requestAnimationFrame(r));
-  fitActive();
   try {
     Object.assign(tab, await invoke('tab_start', { id: tab.id, cols: t.term.cols, rows: t.term.rows }));
   } catch (e) {
     toast(e);
   }
-  renderAll();
-  input.focus();
+  layout();
+  activate(tab.id);
 }
 
 // Sekmeyi listeye ekler ya da günceller (olay ve komut cevabı hangi sırayla gelirse gelsin tek kayıt).
 function upsertTab(tab) {
   const cur = S.tabs.find((t) => t.id === tab.id);
   if (cur) {
-    const changed = cur.alive !== tab.alive;
+    const changed = cur.alive !== tab.alive || cur.name !== tab.name;
     Object.assign(cur, tab);
     return { tab: cur, isNew: false, changed };
   }
@@ -373,56 +429,51 @@ function upsertTab(tab) {
 async function newTab(cwd, resume = null) {
   try {
     const { tab } = upsertTab(await invoke('tab_create', { cwd, resume }));
+    S.zoom = null;
+    closeModal();
     await startTab(tab);
   } catch (e) {
     toast(e);
   }
 }
 
-function selectTab(id) {
-  S.selected = id;
-  S.view = 'term';
-  const a = tabAgent(id);
-  if (a?.unread) {
-    a.unread = false;
-    invoke('agent_read', { id: a.sessionId });
-  }
-  renderAll();
-  setTimeout(() => (curTab()?.alive ? input.focus() : null), 30);
+async function closeTab(id) {
+  await invoke('tab_close', { id });
+  S.tabs = S.tabs.filter((t) => t.id !== id);
+  for (const [k, a] of S.agents) if (a.tab === id) S.agents.delete(k);
+  if (S.active === id) S.active = S.tabs.at(-1)?.id ?? null;
+  if (S.zoom === id) S.zoom = null;
+  S.closing = null;
+  layout();
 }
 
-function showExt(sid) {
-  S.view = 'ext';
-  S.ext = sid;
-  const a = S.agents.get(sid);
-  if (a?.unread) {
-    a.unread = false;
-    invoke('agent_read', { id: sid });
+function saveRename(id, value) {
+  S.renaming = null;
+  const tab = S.tabs.find((t) => t.id === id);
+  if (tab) {
+    tab.name = value.trim();
+    invoke('rename', { target: id, name: value });
+    renderPane(tab);
   }
-  renderAll();
 }
 
 // Bar ya da bildirimden gelen hedef: oturum id'si ya da sekme id'si.
 function goTarget(target) {
   if (!target) return;
   const a = S.agents.get(target);
-  if (a?.tab && S.tabs.some((t) => t.id === a.tab)) return selectTab(a.tab);
-  if (a) return showExt(target);
-  if (S.tabs.some((t) => t.id === target)) selectTab(target);
-}
-
-async function closeTab(id) {
-  await invoke('tab_close', { id });
-  terms.get(id)?.term.dispose();
-  terms.get(id)?.el.remove();
-  terms.delete(id);
-  S.tabs = S.tabs.filter((t) => t.id !== id);
-  for (const [k, a] of S.agents) if (a.tab === id) S.agents.delete(k);
-  if (S.selected === id) {
-    S.selected = S.tabs.at(-1)?.id ?? null;
-    S.view = S.selected ? 'term' : 'new';
+  const tabId = a?.tab && S.tabs.some((t) => t.id === a.tab) ? a.tab : S.tabs.some((t) => t.id === target) ? target : null;
+  if (tabId) {
+    closeModal();
+    if (S.zoom && S.zoom !== tabId) {
+      S.zoom = null;
+      layout();
+    }
+    return activate(tabId);
   }
-  renderAll();
+  if (a) {
+    S.ext = target;
+    openModal('ext');
+  }
 }
 
 async function pickFolder(start) {
@@ -433,121 +484,113 @@ async function saveSettings() {
   await invoke('save_settings', { settings: S.settings });
 }
 
-// ---------- Mesaj kutusu ----------
-function autosize() {
-  input.style.height = 'auto';
-  input.style.height = Math.min(input.scrollHeight, 140) + 'px';
-}
-
-// Metni terminale yazar, sonra Enter. Çok satırlı mesajda satır sonları Claude'un yeni satırı (ESC CR).
-function sendInput() {
-  const tab = curTab();
-  const text = input.value;
-  if (!tab?.alive || !text.trim()) return;
-  invoke('pty_write', { id: tab.id, data: text.replace(/\r?\n/g, '\x1b\r') });
-  setTimeout(() => invoke('pty_write', { id: tab.id, data: '\r' }), 60);
-  input.value = '';
-  autosize();
-}
-
-input.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-    e.preventDefault();
-    sendInput();
-  } else if (e.key === 'Escape') {
-    // Esc mesaj kutusundayken de Claude'a gitsin (işi durdurma, menüyü kapatma).
-    const tab = curTab();
-    if (tab?.alive) invoke('pty_write', { id: tab.id, data: '\x1b' });
-  }
-});
-input.addEventListener('input', autosize);
-$('send').innerHTML = I.up;
-$('send').addEventListener('click', sendInput);
-
 // ---------- Tıklamalar ----------
 $('logo').innerHTML = `${I.spark}<b>DevBar</b>`;
-$('btn-new').innerHTML = `${I.plus}<span>Yeni oturum</span>`;
-$('btn-settings').innerHTML = `${I.sliders}<span>Ayarlar</span>`;
-$('btn-new').addEventListener('click', () => {
-  S.view = 'new';
-  renderAll();
-});
-$('btn-settings').addEventListener('click', async () => {
-  S.view = 'settings';
-  await loadRemote();
-  renderAll();
-});
 
-document.querySelector('.side').addEventListener('click', (e) => {
-  const x = e.target.closest('[data-close]');
-  if (x) {
-    e.stopPropagation();
-    return closeTab(x.dataset.close);
+document.addEventListener('click', async (e) => {
+  const top = e.target.closest('[data-top]')?.dataset.top;
+  if (top === 'new' || top === 'settings' || top === 'others') return openModal(top);
+  if (top === 'resume-all') {
+    for (const t of S.tabs.filter((x) => !x.alive)) await startTab(t);
+    return;
   }
-  const tab = e.target.closest('[data-tab]');
-  if (tab) return selectTab(tab.dataset.tab);
-  const sid = e.target.closest('[data-sid]');
-  if (sid) return showExt(sid.dataset.sid);
-  const act = e.target.closest('[data-act]')?.dataset.act;
-  if (act === 'new') {
-    S.view = 'new';
-    renderAll();
-  } else if (act === 'go-settings') $('btn-settings').click();
 });
 
-$('mhead').addEventListener('click', (e) => {
-  if (e.target.closest('[data-act="close-tab"]') && S.selected) closeTab(S.selected);
-  if (e.target.closest('[data-act="rename"]')) startRename();
+gridEl.addEventListener('click', (e) => {
+  const pane = e.target.closest('[data-pane]');
+  if (!pane) return;
+  const id = pane.dataset.pane;
+  const tab = S.tabs.find((t) => t.id === id);
+  const act = e.target.closest('[data-pact]')?.dataset.pact;
+  if (act === 'close') {
+    if (S.closing === id) return closeTab(id);
+    S.closing = id;
+    renderPane(tab);
+    setTimeout(() => {
+      if (S.closing === id) {
+        S.closing = null;
+        renderPane(tab);
+      }
+    }, 3000);
+    return;
+  }
+  if (act === 'zoom') {
+    S.zoom = S.zoom === id ? null : id;
+    layout();
+    return activate(id);
+  }
+  if (act === 'rename') {
+    S.renaming = id;
+    return renderPane(tab);
+  }
+  if (act === 'resume') return startTab(tab);
+  if (e.target.id !== 'rename') activate(id);
 });
-$('mhead').addEventListener('keydown', (e) => {
+gridEl.addEventListener('dblclick', (e) => {
+  const pn = e.target.closest('.pn');
+  const pane = e.target.closest('[data-pane]');
+  if (pn && pane) {
+    S.renaming = pane.dataset.pane;
+    renderPane(S.tabs.find((t) => t.id === S.renaming));
+  }
+});
+gridEl.addEventListener('keydown', (e) => {
   if (e.target.id !== 'rename') return;
-  if (e.key === 'Enter') saveRename(e.target.value);
+  const id = e.target.closest('[data-pane]')?.dataset.pane;
+  if (e.key === 'Enter') saveRename(id, e.target.value);
   else if (e.key === 'Escape') {
-    S.renaming = false;
-    renderHead();
+    S.renaming = null;
+    renderPane(S.tabs.find((t) => t.id === id));
   }
 });
-$('mhead').addEventListener('focusout', (e) => {
-  if (e.target.id === 'rename' && S.renaming) saveRename(e.target.value);
-});
-// Listede çift tıklama: seç ve adlandır.
-document.querySelector('.side').addEventListener('dblclick', (e) => {
-  const item = e.target.closest('[data-tab], [data-sid]');
-  if (!item) return;
-  if (item.dataset.tab) selectTab(item.dataset.tab);
-  else showExt(item.dataset.sid);
-  startRename();
+gridEl.addEventListener('focusout', (e) => {
+  if (e.target.id === 'rename' && S.renaming) saveRename(S.renaming, e.target.value);
 });
 
-viewEl.addEventListener('click', async (e) => {
+overlay.addEventListener('click', (e) => {
+  if (e.target === overlay) closeModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && S.modal && !e.target.closest('.xterm')) closeModal();
+});
+
+modal.addEventListener('click', async (e) => {
+  const m = e.target.closest('[data-m]')?.dataset.m;
+  if (m === 'close') return closeModal();
+  if (m) return openModal(m);
   const cwd = e.target.closest('[data-cwd]')?.dataset.cwd;
   if (cwd) return newTab(cwd);
+  const sid = e.target.closest('[data-sid]')?.dataset.sid;
+  if (sid) {
+    S.ext = sid;
+    return openModal('ext');
+  }
   const set = e.target.closest('[data-set]');
   if (set) {
     const key = set.dataset.set;
     S.settings[key] = key === 'bar' ? set.dataset.val === 'true' : set.dataset.val;
     await saveSettings();
-    return renderBody();
+    return renderModal();
   }
   const tp = e.target.closest('[data-themepick]');
   if (tp) {
     S.settings.theme = tp.dataset.themepick;
     await invoke('set_theme', { theme: S.settings.theme });
-    return renderBody();
+    return renderModal();
   }
   const rem = e.target.closest('[data-rem]');
   if (rem) {
     const r = S.settings.reminders[+rem.dataset.rem];
     r.minutes = Math.min(240, Math.max(5, r.minutes + +rem.dataset.d));
     await saveSettings();
-    return renderBody();
+    return renderModal();
   }
   const remOn = e.target.closest('[data-remon]');
   if (remOn) {
     const r = S.settings.reminders[+remOn.dataset.remon];
     r.on = !r.on;
     await saveSettings();
-    return renderBody();
+    return renderModal();
   }
   const act = e.target.closest('[data-act]')?.dataset.act;
   if (act === 'pick') {
@@ -555,14 +598,11 @@ viewEl.addEventListener('click', async (e) => {
     if (p) {
       S.settings.cwd = p;
       await saveSettings();
-      renderBody();
+      renderModal();
     }
   } else if (act === 'pick-new') {
     const p = await pickFolder(S.settings.cwd);
     if (p) newTab(p);
-  } else if (act === 'resume') {
-    const tab = curTab();
-    if (tab) startTab(tab);
   } else if (act === 'adopt') {
     const a = S.agents.get(S.ext);
     if (a) newTab(a.cwd, a.sessionId);
@@ -572,7 +612,7 @@ viewEl.addEventListener('click', async (e) => {
     } catch (err) {
       toast(err);
     }
-    renderAll();
+    renderModal();
   } else if (act === 'remote-toggle') {
     try {
       S.remote = await invoke('remote_set', { on: !S.remote?.on });
@@ -580,10 +620,10 @@ viewEl.addEventListener('click', async (e) => {
       toast(err);
       await loadRemote();
     }
-    renderAll();
+    renderModal();
   } else if (act === 'remote-regen') {
     S.remote = await invoke('remote_regen');
-    renderBody();
+    renderModal();
   } else if (act === 'quit') {
     invoke('quit');
   }
@@ -593,14 +633,11 @@ viewEl.addEventListener('click', async (e) => {
 T.event.listen('select', ({ payload }) => goTarget(payload));
 // Bardaki menüden "bu klasörde Claude".
 T.event.listen('new-tab', ({ payload: cwd }) => newTab(cwd));
-T.event.listen('show-new', () => {
-  S.view = 'new';
-  renderAll();
-});
-T.event.listen('open-settings', () => $('btn-settings').click());
+T.event.listen('show-new', () => openModal('new'));
+T.event.listen('open-settings', () => openModal('settings'));
 T.event.listen('settings', ({ payload }) => {
   S.settings = payload;
-  if (S.view === 'settings') renderBody();
+  if (S.modal === 'settings') renderModal();
 });
 
 T.event.listen('pty', ({ payload }) => terms.get(payload.id)?.term.write(payload.data));
@@ -608,42 +645,42 @@ T.event.listen('pty-exit', ({ payload: id }) => {
   const tab = S.tabs.find((t) => t.id === id);
   if (tab) tab.alive = false;
   terms.get(id)?.term.write('\r\n\x1b[90m[oturum kapandı]\x1b[0m\r\n');
-  renderAll();
+  if (tab) renderPane(tab);
+  renderTop();
 });
 
 // Sekme açıldı, başladı ya da kapandı. Telefondan açılan sekme burada öğrenilir;
-// terminali hemen kurulur ki ilk çıktı kaçmasın (görünür olunca fit edilir).
+// paneli ve terminali hemen kurulur ki ilk çıktı kaçmasın.
 T.event.listen('tab', ({ payload }) => {
   const { tab, isNew, changed } = upsertTab(payload);
   if (isNew) {
-    const ref = terms.get(S.selected) || [...terms.values()][0];
-    const t = ensureTerm(tab.id);
-    if (ref) t.term.resize(ref.term.cols, ref.term.rows);
+    ensurePane(tab);
+    ensureTerm(tab.id);
+    layout();
+  } else if (changed) {
+    renderPane(tab);
+    renderTop();
   }
-  if (changed) renderAll();
 });
 
 T.event.listen('agent', ({ payload: a }) => {
   if (a.status === 'ended') S.agents.delete(a.sessionId);
   else S.agents.set(a.sessionId, a);
-  if (a.tab) {
-    const tab = S.tabs.find((t) => t.id === a.tab);
-    if (tab && a.status === 'running') tab.used = true;
-  }
-  const viewing = document.hasFocus() && ((S.view === 'term' && S.selected === a.tab) || (S.view === 'ext' && S.ext === a.sessionId));
-  if (viewing && a.unread) {
+  const tab = a.tab ? S.tabs.find((t) => t.id === a.tab) : null;
+  if (tab && a.status === 'running') tab.used = true;
+  if (tab && document.hasFocus() && S.active === tab.id && a.unread) {
     a.unread = false;
     invoke('agent_read', { id: a.sessionId });
   }
-  renderSide();
-  renderHead();
-  if (S.view === 'ext' && S.ext === a.sessionId) renderBody();
+  if (tab) renderPane(tab);
+  renderTop();
+  if (S.modal === 'others' || (S.modal === 'ext' && S.ext === a.sessionId)) renderModal();
 });
 T.event.listen('agent-remove', ({ payload: id }) => {
   S.agents.delete(id);
-  renderSide();
+  renderTop();
+  if (S.modal === 'others') renderModal();
 });
-setInterval(renderSide, 30000); // "x dk önce" yazıları güncel kalsın
 
 // ---------- Başlangıç ----------
 (async () => {
@@ -653,7 +690,6 @@ setInterval(renderSide, 30000); // "x dk önce" yazıları güncel kalsın
   S.hooks = st.hooks;
   for (const a of st.agents) S.agents.set(a.sessionId, a);
   await loadRemote();
-  S.selected = S.tabs.at(-1)?.id ?? null;
-  S.view = S.selected ? 'term' : 'new';
-  renderAll();
+  S.active = S.tabs.at(-1)?.id ?? null;
+  layout();
 })();

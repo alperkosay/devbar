@@ -100,21 +100,69 @@ function peekState() {
 }
 
 let lastSize = '';
+let lastNotch = '';
+const ANNOUNCE_MS = 6000;
+
+// Ortadaki sekme normalde sakin bir özet gösterir; iş bitince ya da Claude izin isteyince
+// birkaç saniye genişleyip haber verir (S.announce).
+function notchContent(p) {
+  const an = S.announce && Date.now() < S.announce.until ? S.announce : null;
+  if (an) {
+    const a = an.a;
+    if (an.kind === 'done')
+      return {
+        cls: 'announce done',
+        sid: a.sessionId,
+        html: `<span class="ic done">${I.check}</span><span class="txt"><b>${esc(nameOf(a))} bitti</b><span>${an.took ? an.took + ' · ' : ''}${esc(a.prompt || '')}</span></span>`,
+      };
+    return {
+      cls: 'announce waiting',
+      sid: a.sessionId,
+      html: `<span class="ic waiting">${I.bell}</span><span class="txt"><b>${esc(nameOf(a))}</b><span>${esc(a.activity || 'seni bekliyor')}</span></span>`,
+    };
+  }
+  const running = p.list.filter((a) => a.status === 'running');
+  const waiting = p.list.filter((a) => a.status === 'waiting');
+  if (waiting.length) {
+    const a = waiting[0];
+    const more = waiting.length > 1 ? `<span class="more">+${waiting.length - 1}</span>` : '';
+    return { cls: 'waiting', sid: a.sessionId, html: `<span class="ic waiting">${I.bell}</span><span class="txt"><b>${esc(nameOf(a))}</b><span>seni bekliyor</span></span>${more}` };
+  }
+  if (running.length === 1) {
+    const a = running[0];
+    return { cls: 'busy', sid: a.sessionId, html: `<span class="sdot running"></span><span class="txt"><b>${esc(nameOf(a))}</b><span>çalışıyor</span></span>` };
+  }
+  if (running.length > 1)
+    return { cls: 'busy', sid: '', html: `<span class="sdot running"></span><span class="txt"><b>${running.length} oturum</b><span>çalışıyor</span></span>` };
+  const label = p.list.length ? `${p.list.length} oturum` : 'Hazır';
+  return { cls: '', sid: '', html: `<span class="ic spark">${I.spark}</span><span class="txt"><b>${label}</b></span>` };
+}
+
+// İçerik değişince sekme genişliği yumuşakça yeni boyuna akar.
+function setNotch(c) {
+  const key = c.cls + c.html;
+  notch.dataset.sid = c.sid;
+  if (key === lastNotch) return;
+  lastNotch = key;
+  const from = notch.offsetWidth;
+  notch.className = `notch ${c.cls}`;
+  notch.style.width = 'auto';
+  notch.innerHTML = c.html;
+  const to = notch.offsetWidth;
+  notch.style.width = from + 'px';
+  void notch.offsetWidth;
+  notch.style.width = to + 'px';
+  if (!S.settings.bar) {
+    // Yüzen modda pencere önce büyür, küçülürken animasyon bitince küçülür.
+    const w = (x) => Math.ceil(x + 24);
+    if (to > from) invoke('bar_size', { w: w(to), h: 34 });
+    else setTimeout(() => invoke('bar_size', { w: w(to), h: 34 }), 520);
+  }
+}
+
 function render() {
   const p = peekState();
-  notch.classList.toggle('busy', p.kind === 'running');
-  notch.classList.toggle('waiting', p.kind === 'waiting');
-  notch.classList.toggle('done', p.kind === 'done');
-  if (p.kind === 'idle') {
-    const dots = p.list.slice(0, 6).map((a) => `<span class="dot ${a.status}"></span>`).join('');
-    const label = p.list.length ? `${p.list.length} oturum` : 'Hazır';
-    notch.innerHTML = `<span class="ic spark">${I.spark}</span><span class="txt"><b>${label}</b></span>${dots ? `<span class="dots">${dots}</span>` : ''}`;
-  } else {
-    const ic = p.kind === 'running' ? '<span class="spin"></span>' : `<span class="ic ${p.kind}">${p.kind === 'waiting' ? I.bell : I.check}</span>`;
-    const more = p.extra > 0 ? `<span class="more">+${p.extra}</span>` : '';
-    notch.innerHTML = `${ic}<span class="txt"><b>${esc(nameOf(p.a))}</b><span>${esc(p.a.short || p.a.activity)}</span></span>${more}`;
-  }
-  notch.dataset.sid = p.a?.sessionId || '';
+  setNotch(notchContent(p));
 
   chipsEl.innerHTML = p.list
     .map(
@@ -123,18 +171,15 @@ function render() {
     )
     .join('');
   fitChips(p.list.length);
-  notch.dataset.key = p.a ? `session:${p.a.sessionId}` : 'menu:';
+  notch.dataset.key = notch.dataset.sid ? `session:${notch.dataset.sid}` : 'menu:';
   markOpen();
+}
 
-  // Yüzen ada modunda pencere hap boyunda olsun.
-  if (!S.settings.bar) {
-    const r = notch.getBoundingClientRect();
-    const size = `${Math.ceil(r.width + 24)}x34`;
-    if (size !== lastSize) {
-      lastSize = size;
-      invoke('bar_size', { w: Math.ceil(r.width + 24), h: 34 });
-    }
-  }
+function announce(kind, a, took) {
+  S.announce = { kind, a, took, until: Date.now() + ANNOUNCE_MS };
+  render();
+  clearTimeout(announce.t);
+  announce.t = setTimeout(render, ANNOUNCE_MS + 50);
 }
 
 // Çipler sığmazsa sondan atılır (en acil olanlar önde kalır), yerine "+N" liste butonu gelir.
@@ -155,18 +200,12 @@ function fitChips(total) {
   }
 }
 
-function flash(kind) {
-  const cls = kind === 'waiting' ? 'flash-waiting' : 'flash-done';
-  notch.classList.remove('flash-done', 'flash-waiting');
-  void notch.offsetWidth;
-  notch.classList.add(cls);
-  setTimeout(() => notch.classList.remove(cls), 1700);
-}
 
 function setLayout(bar) {
   S.settings.bar = bar;
   document.body.classList.toggle('float', !bar);
   lastSize = '';
+  lastNotch = '';
   render();
 }
 
@@ -202,24 +241,24 @@ chipsEl.addEventListener('dblclick', (e) => {
 const runStart = new Map(); // sessionId -> çalışmaya başladığı an
 const LONG_RUN = 60_000; // 1 dakikadan uzun süren iş bitince bildir
 
+const fmtTook = (ms) => (ms < 60000 ? `${Math.max(1, Math.round(ms / 1000))} sn` : `${Math.round(ms / 60000)} dk`);
+
 function onAgent(a, prev) {
-  if (!PRIMARY) {
-    if (prev && prev.status !== a.status && (a.status === 'done' || a.status === 'waiting')) flash(a.status);
-    return;
-  }
   if (a.status === 'running' && prev?.status !== 'running') runStart.set(a.sessionId, Date.now());
-  if (prev && prev.status !== a.status) {
-    if (a.status === 'done' || a.status === 'waiting') flash(a.status);
-    const started = runStart.get(a.sessionId);
-    if (a.status === 'done' && started && Date.now() - started > LONG_RUN) {
-      const min = Math.round((Date.now() - started) / 60000);
-      invoke('notify', { title: `${nameOf(a)} bitti`, body: `${min} dakika sürdü${a.prompt ? ': ' + a.prompt : ''}` });
+  if (!prev || prev.status === a.status) return;
+  const started = runStart.get(a.sessionId);
+  const took = started ? Date.now() - started : 0;
+  if (a.status === 'done') announce('done', a, took ? fmtTook(took) : '');
+  if (a.status === 'waiting') announce('waiting', a, '');
+  if (PRIMARY) {
+    if (a.status === 'done' && took > LONG_RUN) {
+      invoke('notify', { title: `${nameOf(a)} bitti`, body: `${fmtTook(took)} sürdü${a.prompt ? ': ' + a.prompt : ''}` });
     }
     if (a.status === 'waiting') {
       invoke('notify', { title: `${nameOf(a)} seni bekliyor`, body: a.activity || 'İzin ya da cevap bekliyor' });
     }
-    if (a.status !== 'running') runStart.delete(a.sessionId);
   }
+  if (a.status !== 'running') runStart.delete(a.sessionId);
 }
 
 // ---------- Hatırlatıcılar ----------

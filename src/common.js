@@ -40,10 +40,11 @@ async function getState() {
 
 // Bar ve çekmece teması (gece | liquid | light | ocean).
 const THEMES = [
-  ['gece', 'Gece'],
-  ['liquid', 'Liquid'],
-  ['light', 'Açık'],
-  ['ocean', 'Okyanus'],
+  ['gece', 'Obsidyen'],
+  ['liquid', 'Liquid Glass'],
+  ['aurora', 'Aurora'],
+  ['latte', 'Latte'],
+  ['sunset', 'Gün batımı'],
 ];
 function applyTheme(t) {
   document.body.dataset.theme = THEMES.some(([k]) => k === t) ? t : 'gece';

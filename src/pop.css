@@ -177,15 +177,16 @@ body { padding: 0 12px 20px; }
 .sw { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; box-shadow: 0 0 0 1px var(--line2); transition: transform 0.15s; }
 .sw:hover { transform: scale(1.12); }
 .sw.on { border-color: var(--accent); }
-.sw.gece { background: linear-gradient(135deg, #26262f, #0b0b0e); }
-.sw.liquid { background: linear-gradient(135deg, #ffffff 0%, #9a9aa6 45%, #18181b 100%); }
-.sw.light { background: linear-gradient(135deg, #ffffff, #e4e4ea); }
-.sw.ocean { background: linear-gradient(135deg, #38bdf8, #0a1628 70%); }
+.sw.gece { background: linear-gradient(135deg, #2a2a33, #0b0b0e); }
+.sw.liquid { background: radial-gradient(circle at 30% 25%, #ffffff 0%, #d4d4d8 30%, #52525b 70%, #18181b 100%); }
+.sw.aurora { background: linear-gradient(135deg, #5eead4 0%, #0f2a32 55%, #0c1a28 100%); }
+.sw.latte { background: linear-gradient(135deg, #fffdf9 0%, #efe6da 55%, #c2541f 100%); }
+.sw.sunset { background: linear-gradient(135deg, #fb923c 0%, #3a2218 60%, #17110e 100%); }
 
 /* Liquid çekmece: cam kenar ve parlak üst çizgi. */
 body[data-theme="liquid"] .sheet { border-color: rgba(255, 255, 255, 0.18); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 18px 40px rgba(0, 0, 0, 0.55); }
 body[data-theme="liquid"] .c-green, body[data-theme="liquid"] .c-sky, body[data-theme="liquid"] .c-pink,
 body[data-theme="liquid"] .c-amber, body[data-theme="liquid"] .c-accent, body[data-theme="liquid"] .c-blue { color: #fff; background: rgba(255, 255, 255, 0.1); }
-body[data-theme="light"] .sheet { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18); }
+body[data-theme="latte"] .sheet { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18); }
 
 button.row { width: 100%; font: inherit; color: inherit; }
