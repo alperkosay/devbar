@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <title>Ada</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="island" class="island">
+    <i class="ear l"></i><i class="ear r"></i>
+    <div class="clip">
+      <div class="peek" id="peek"></div>
+
+      <div class="panel" id="panel">
+        <header class="top">
+          <button class="icon-btn" id="btn-new" title="Yeni oturum (Ctrl+N)"></button>
+          <div class="chips" id="chips"></div>
+          <button class="icon-btn" id="btn-settings" title="Ayarlar"></button>
+        </header>
+
+        <main class="body" id="body"></main>
+
+        <footer class="composer" id="composer">
+          <div class="bar">
+            <button class="folder" id="folder"></button>
+            <div class="bar-right" id="bar-right"></div>
+          </div>
+          <div class="input-row">
+            <textarea id="input" rows="1" spellcheck="false"></textarea>
+            <button class="send" id="send"></button>
+          </div>
+          <div class="toast" id="toast"></div>
+        </footer>
+      </div>
+    </div>
+  </div>
+  <script src="icons.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
