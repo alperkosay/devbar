@@ -1,6 +1,6 @@
 [package]
 name = "ada"
-version = "0.3.0"
+version = "0.4.0"
 description = "Claude Code oturumları için ekranın tepesinde duran ada"
 edition = "2021"
 

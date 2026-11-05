@@ -128,7 +128,7 @@ impl Hub {
         self.inner.lock().unwrap().screens.remove(id);
     }
 
-    fn screen(&self, id: &str) -> Option<Value> {
+    pub fn screen(&self, id: &str) -> Option<Value> {
         let inner = self.inner.lock().unwrap();
         inner.screens.get(id).map(|s| json!({ "id": id, "data": s.data, "cols": s.cols, "rows": s.rows }))
     }

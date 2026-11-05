@@ -72,8 +72,21 @@ function setLayout(bar) {
 // ---------- Tıklamalar ----------
 $('brand').innerHTML = `${I.spark}<span>Ada</span>`;
 $('brand').addEventListener('click', () => invoke('open_app', { target: null }));
-notch.addEventListener('click', () => invoke('open_app', { target: notch.dataset.sid || null }));
+// Oturuma tıklayınca altında kart açılır; çift tıklayınca direkt ana pencere.
+function pop(el, sid) {
+  const r = el.getBoundingClientRect();
+  invoke('show_pop', { sid, x: r.left + r.width / 2 });
+}
+notch.addEventListener('click', () => {
+  if (notch.dataset.sid) pop(notch, notch.dataset.sid);
+  else invoke('open_app', { target: null });
+});
+notch.addEventListener('dblclick', () => invoke('open_app', { target: notch.dataset.sid || null }));
 chipsEl.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-sid]');
+  if (b) pop(b, b.dataset.sid);
+});
+chipsEl.addEventListener('dblclick', (e) => {
   const b = e.target.closest('[data-sid]');
   if (b) invoke('open_app', { target: b.dataset.sid });
 });

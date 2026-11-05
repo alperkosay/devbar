@@ -18,6 +18,8 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, RunEven
 /// Status bar modunda üstte ayrılan şerit (mantıksal piksel). Bar penceresi tam bu boyda;
 /// tıklama geçirme gibi hilelere gerek yok. Asıl arayüz ayrı, normal bir pencerede ("app").
 const BAR_H: f64 = 30.0;
+/// Bardaki oturuma tıklayınca altında açılan kartın genişliği (mantıksal piksel).
+const POP_W: f64 = 440.0;
 const SHORTCUT: &str = "ctrl+alt+space";
 
 pub struct AppState {
@@ -27,6 +29,9 @@ pub struct AppState {
     pub settings: Mutex<Settings>,
     /// Yüzen ada modunda hap boyutu (mantıksal piksel), bar arayüzü bildirir.
     pub pill: Mutex<(f64, f64)>,
+    /// Açılır kart: gösterilen oturum ve en son ne zaman kapandığı (aynı çipe tekrar
+    /// tıklayınca kapansın, yeniden açılmasın diye).
+    pub pop: Mutex<(String, Option<std::time::Instant>)>,
     /// Ana monitör, fiziksel piksel: x, y, w, h.
     pub monitor: Mutex<(i32, i32, i32, i32)>,
     pub dir: PathBuf,
@@ -347,6 +352,54 @@ fn notify(app: AppHandle, title: String, body: String) {
     let _ = app.notification().builder().title(title).body(body).show();
 }
 
+/// Bardaki bir oturuma tıklanınca altında kart açar. `x`: tıklanan çipin ortası, bar
+/// penceresine göre mantıksal piksel.
+#[tauri::command]
+fn show_pop(app: AppHandle, st: State<'_, Shared>, sid: String, x: f64) {
+    {
+        let mut p = st.pop.lock().unwrap();
+        // Kart açıkken aynı çipe tıklamak önce kartı kapatır (odak kaybı); hemen yeniden açma.
+        if p.0 == sid && p.1.is_some_and(|t| t.elapsed() < Duration::from_millis(400)) {
+            p.1 = None;
+            return;
+        }
+        *p = (sid.clone(), None);
+    }
+    let (Some(bar), Some(pop)) = (app.get_webview_window("bar"), app.get_webview_window("pop")) else { return };
+    let (Ok(bp), Ok(bs), Ok(scale)) = (bar.outer_position(), bar.outer_size(), bar.scale_factor()) else { return };
+    let (mx, _, mw, _) = *st.monitor.lock().unwrap();
+    let pw = (POP_W * scale).round() as i32;
+    let margin = (8.0 * scale) as i32;
+    let px = (bp.x + (x * scale) as i32 - pw / 2).clamp(mx + margin, mx + mw - pw - margin);
+    let py = bp.y + bs.height as i32 + (2.0 * scale) as i32;
+    let _ = pop.set_position(PhysicalPosition::new(px, py));
+    let _ = app.emit_to("pop", "pop-show", sid);
+    let _ = pop.show();
+    let _ = pop.set_focus();
+}
+
+#[tauri::command]
+fn hide_pop(app: AppHandle, st: State<'_, Shared>) {
+    st.pop.lock().unwrap().1 = Some(std::time::Instant::now());
+    if let Some(pop) = app.get_webview_window("pop") {
+        let _ = pop.hide();
+    }
+}
+
+/// Kart içeriğinin yüksekliği değişince pencere de o boya gelir.
+#[tauri::command]
+fn pop_size(app: AppHandle, h: f64) {
+    if let Some(pop) = app.get_webview_window("pop") {
+        let _ = pop.set_size(tauri::LogicalSize::new(POP_W, h.clamp(80.0, 640.0)));
+    }
+}
+
+/// Bir sekmenin son ekran çıktısı (ham terminal verisi, sütun ve satır sayısı).
+#[tauri::command]
+fn tab_screen(st: State<'_, Shared>, id: String) -> Option<serde_json::Value> {
+    st.hub.screen(&id)
+}
+
 #[tauri::command]
 fn ready(app: AppHandle, st: State<'_, Shared>) {
     place(&app, &st);
@@ -479,6 +532,7 @@ fn main() {
                 agents: Mutex::new(HashMap::new()),
                 settings: Mutex::new(settings),
                 pill: Mutex::new((160.0, 34.0)),
+                pop: Mutex::new((String::new(), None)),
                 monitor: Mutex::new((0, 0, 0, 0)),
                 dir,
                 hub: remote::Hub::default(),
@@ -536,6 +590,10 @@ fn main() {
             hide_app,
             bar_size,
             notify,
+            show_pop,
+            hide_pop,
+            pop_size,
+            tab_screen,
             ready,
             quit
         ])
