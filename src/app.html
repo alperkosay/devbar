@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <title>Ada</title>
+  <link rel="stylesheet" href="vendor/xterm.css">
+  <link rel="stylesheet" href="base.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="side-top">
+        <div class="logo" id="logo"></div>
+        <button class="new-btn" id="btn-new"></button>
+      </div>
+      <div class="side-scroll">
+        <div class="sec-t">Ada'daki oturumlar</div>
+        <div id="tablist"></div>
+        <div class="sec-t">Diğer oturumlar <span>terminal, VS Code</span></div>
+        <div id="extlist"></div>
+      </div>
+      <div class="side-foot">
+        <button class="foot-btn" id="btn-settings"></button>
+        <span class="phone-ind" id="phone-ind"></span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="mhead" id="mhead"></header>
+      <div class="body" id="body">
+        <div class="terms" id="terms"></div>
+        <div class="view" id="view"></div>
+      </div>
+      <footer class="composer" id="composer" hidden>
+        <div class="input-row">
+          <textarea id="input" rows="1" spellcheck="false" placeholder="Claude'a yaz…"></textarea>
+          <button class="send" id="send" title="Gönder (Enter)"></button>
+        </div>
+        <div class="chint"><span><kbd>Enter</kbd> gönder</span><span><kbd>Shift</kbd>+<kbd>Enter</kbd> yeni satır</span><span>İzin sorularında terminale tıklayıp ok tuşlarıyla seçebilirsin</span></div>
+      </footer>
+    </main>
+  </div>
+
+  <script src="vendor/xterm.js"></script>
+  <script src="vendor/addon-fit.js"></script>
+  <script src="vendor/qrcode.js"></script>
+  <script src="icons.js"></script>
+  <script src="common.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

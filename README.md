@@ -1,10 +1,11 @@
 # Ada
 
-Aynı anda birçok Claude Code oturumu çalıştıranlar için ekranın tepesinde duran bir status bar ve ada (Windows, Tauri 2).
+Aynı anda birçok Claude Code oturumu çalıştıranlar için: ekranın tepesinde durum barı, oturumları yöneten bir pencere ve telefondan erişim (Windows, Tauri 2).
 
-- Her sekme gerçek bir terminalde etkileşimli `claude` çalıştırır: izinler, slash komutlar, her şey.
-- Claude Code hook'ları sayesinde Ada'daki ve dışarıdaki (terminal, VS Code) tüm oturumların durumu canlı görünür: çalışıyor, izin bekliyor, bitti.
-- `Ctrl+Alt+Space` ile her yerden açılır ve kapanır.
+- **Üst bar** sadece durum gösterir: ortada en acil oturum (izin bekleyen, çalışan, biten), sağda tüm projeler. Tıklayınca ana pencere açılır.
+- **Ana pencere:** solda Ada'daki ve dışarıdaki (terminal, VS Code) oturumlar, sağda seçili oturumun gerçek terminali ve altta mesaj kutusu. Etkileşimli `claude` çalışır: izinler, slash komutlar, MCP, her şey.
+- Durumlar Claude Code hook'larından gelir. Uzun süren iş bitince ve oturum seni beklerken Windows bildirimi gelir.
+- `Ctrl+Alt+Space` ya da sağ alttaki tepsi ikonu ile pencere açılır/gizlenir. Pencereyi kapatmak oturumları durdurmaz.
 
 Geliştirme: `npm install`, sonra `npx tauri dev`. Kurulum paketi: `npx tauri build`.
 

@@ -28,9 +28,6 @@ mod sys {
     #[link(name = "user32")]
     extern "system" {
         pub fn GetForegroundWindow() -> isize;
-        pub fn SetForegroundWindow(hwnd: isize) -> i32;
-        pub fn GetWindowLongPtrW(hwnd: isize, index: i32) -> isize;
-        pub fn SetWindowLongPtrW(hwnd: isize, index: i32, value: isize) -> isize;
         pub fn GetWindowRect(hwnd: isize, rc: *mut Rect) -> i32;
         pub fn GetClassNameW(hwnd: isize, buf: *mut u16, len: i32) -> i32;
         pub fn GetLastInputInfo(info: *mut LastInput) -> i32;
@@ -51,44 +48,6 @@ fn hwnd(win: &WebviewWindow) -> Option<isize> {
     win.hwnd().ok().map(|h| h.0 as isize)
 }
 
-pub fn foreground() -> isize {
-    #[cfg(windows)]
-    unsafe {
-        sys::GetForegroundWindow()
-    }
-    #[cfg(not(windows))]
-    0
-}
-
-pub fn restore_foreground(h: isize) {
-    #[cfg(windows)]
-    unsafe {
-        sys::SetForegroundWindow(h);
-    }
-    #[cfg(not(windows))]
-    let _ = h;
-}
-
-/// Tauri'nin set_ignore_cursor_events(false) çağrısı WS_EX_TRANSPARENT'ı kaldırmıyor,
-/// bu yüzden bayrağı doğrudan değiştiriyoruz.
-pub fn click_through(win: &WebviewWindow, on: bool) {
-    #[cfg(windows)]
-    {
-        const GWL_EXSTYLE: i32 = -20;
-        const WS_EX_TRANSPARENT: isize = 0x20;
-        const WS_EX_LAYERED: isize = 0x80000;
-        let Some(h) = hwnd(win) else { return };
-        unsafe {
-            let ex = sys::GetWindowLongPtrW(h, GWL_EXSTYLE);
-            let next = if on { ex | WS_EX_TRANSPARENT | WS_EX_LAYERED } else { ex & !WS_EX_TRANSPARENT };
-            if next != ex {
-                sys::SetWindowLongPtrW(h, GWL_EXSTYLE, next);
-            }
-        }
-    }
-    #[cfg(not(windows))]
-    let _ = win.set_ignore_cursor_events(on);
-}
 
 /// Ekranın üstünde `height` fiziksel piksellik şeridi görev çubuğu gibi ayırır (AppBar).
 /// Böylece ekranı kaplayan pencereler şeridin altından başlar.

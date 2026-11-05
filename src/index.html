@@ -2,42 +2,18 @@
 <html lang="tr">
 <head>
   <meta charset="utf-8">
-  <title>Ada</title>
-  <link rel="stylesheet" href="vendor/xterm.css">
-  <link rel="stylesheet" href="style.css">
+  <title>Ada bar</title>
+  <link rel="stylesheet" href="base.css">
+  <link rel="stylesheet" href="bar.css">
 </head>
 <body>
-  <!-- Status bar modu: ekranın üstündeki şerit -->
-  <div class="topbar" id="topbar">
-    <div class="tb-left" id="tb-left"></div>
-    <div class="tb-right" id="tb-right"></div>
+  <div class="bar">
+    <div class="side-l"><button class="brand" id="brand" title="Ada'yı aç"></button></div>
+    <div class="notch" id="notch" title="Ada'yı aç"></div>
+    <div class="side-r" id="chips"></div>
   </div>
-
-  <div id="island" class="island">
-    <i class="ear l"></i><i class="ear r"></i>
-    <div class="clip">
-      <div class="peek" id="peek"></div>
-      <div class="remind" id="remind"></div>
-
-      <div class="panel" id="panel">
-        <header class="top">
-          <button class="icon-btn" id="btn-new" title="Yeni oturum"></button>
-          <div class="chips" id="chips"></div>
-          <button class="icon-btn" id="btn-all" title="Tüm Claude oturumları"></button>
-          <button class="icon-btn" id="btn-settings" title="Ayarlar"></button>
-        </header>
-        <main class="body" id="body">
-          <div class="terms" id="terms"></div>
-          <div class="view" id="view"></div>
-        </main>
-      </div>
-    </div>
-  </div>
-
-  <script src="vendor/xterm.js"></script>
-  <script src="vendor/addon-fit.js"></script>
-  <script src="vendor/qrcode.js"></script>
   <script src="icons.js"></script>
-  <script src="main.js"></script>
+  <script src="common.js"></script>
+  <script src="bar.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-// Ada: ekranın tepesinde duran, Claude Code oturumlarını yöneten bar ve ada.
+// Ada: Claude Code oturumları için üstte durum barı ve oturumları yöneten ana pencere.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod hooks;
@@ -15,13 +15,9 @@ use std::time::Duration;
 use store::{now, Settings, Tab};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, RunEvent, State};
 
-/// Yüzen ada modunda pencere boyutu (mantıksal piksel). Pencere sabit ve şeffaf;
-/// ada CSS ile büyür, dışındaki alan tıklamaları alttaki uygulamaya geçirir.
-const FLOAT_W: f64 = 960.0;
-const FLOAT_H: f64 = 640.0;
-/// Status bar modunda ayrılan şerit ve altında panelin açılacağı alan.
+/// Status bar modunda üstte ayrılan şerit (mantıksal piksel). Bar penceresi tam bu boyda;
+/// tıklama geçirme gibi hilelere gerek yok. Asıl arayüz ayrı, normal bir pencerede ("app").
 const BAR_H: f64 = 30.0;
-const DROP_H: f64 = 610.0;
 const SHORTCUT: &str = "ctrl+alt+space";
 
 pub struct AppState {
@@ -29,10 +25,8 @@ pub struct AppState {
     pub ptys: Mutex<HashMap<String, pty::Pty>>,
     pub agents: Mutex<HashMap<String, hooks::Agent>>,
     pub settings: Mutex<Settings>,
-    /// Tıklanabilir alanlar, pencereye göre mantıksal piksel: [x, y, w, h].
-    pub hits: Mutex<Vec<[f64; 4]>>,
-    /// Ada açılmadan önce odakta olan pencere.
-    pub prev_fg: Mutex<isize>,
+    /// Yüzen ada modunda hap boyutu (mantıksal piksel), bar arayüzü bildirir.
+    pub pill: Mutex<(f64, f64)>,
     /// Ana monitör, fiziksel piksel: x, y, w, h.
     pub monitor: Mutex<(i32, i32, i32, i32)>,
     pub dir: PathBuf,
@@ -80,6 +74,12 @@ fn get_state(st: State<'_, Shared>) -> Snapshot {
 
 /// Yeni sekme kaydı açar (süreç henüz başlamaz). Masaüstünden ve telefondan ortak kullanılır.
 pub fn create_tab(app: &AppHandle, st: &Shared, cwd: Option<String>) -> Result<Tab, String> {
+    create_tab_with(app, st, cwd, None)
+}
+
+/// `resume` verilirse sekme o Claude oturumuna `--resume` ile bağlanır (dışarıda açılmış
+/// bir oturuma Ada'dan devam etmek için).
+pub fn create_tab_with(app: &AppHandle, st: &Shared, cwd: Option<String>, resume: Option<String>) -> Result<Tab, String> {
     let dir = cwd.filter(|c| !c.trim().is_empty()).unwrap_or_else(|| st.settings.lock().unwrap().cwd.clone());
     if !Path::new(&dir).is_dir() {
         return Err(format!("Klasör bulunamadı: {dir}"));
@@ -87,7 +87,8 @@ pub fn create_tab(app: &AppHandle, st: &Shared, cwd: Option<String>) -> Result<T
     let tab = Tab {
         id: uuid::Uuid::new_v4().to_string(),
         cwd: dir.clone(),
-        claude_id: uuid::Uuid::new_v4().to_string(),
+        used: resume.is_some(),
+        claude_id: resume.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
         ..Default::default()
     };
     st.tabs.lock().unwrap().push(tab.clone());
@@ -156,8 +157,8 @@ pub fn start_tab(app: &AppHandle, st: &Shared, id: &str, cols: u16, rows: u16) -
 }
 
 #[tauri::command]
-fn tab_create(app: AppHandle, st: State<'_, Shared>, cwd: Option<String>) -> Result<Tab, String> {
-    create_tab(&app, &st, cwd)
+fn tab_create(app: AppHandle, st: State<'_, Shared>, cwd: Option<String>, resume: Option<String>) -> Result<Tab, String> {
+    create_tab_with(&app, &st, cwd, resume)
 }
 
 #[tauri::command]
@@ -215,8 +216,9 @@ fn save_settings(app: AppHandle, st: State<'_, Shared>, mut settings: Settings) 
         settings.remote_token = cur.remote_token.clone();
         cur.bar != settings.bar
     };
-    *st.settings.lock().unwrap() = settings;
+    *st.settings.lock().unwrap() = settings.clone();
     save_settings_file(&st);
+    let _ = app.emit("settings", settings);
     if bar_changed {
         place(&app, &st);
     }
@@ -281,7 +283,7 @@ fn idle_seconds() -> u64 {
 async fn pick_folder(app: AppHandle, start: Option<String>) -> Option<String> {
     use tauri_plugin_dialog::DialogExt;
     let mut d = app.dialog().file().set_title("Klasör seç");
-    if let Some(w) = app.get_webview_window("main") {
+    if let Some(w) = app.get_webview_window("app") {
         d = d.set_parent(&w);
     }
     if let Some(s) = start.filter(|s| Path::new(s).is_dir()) {
@@ -290,36 +292,65 @@ async fn pick_folder(app: AppHandle, start: Option<String>) -> Option<String> {
     d.blocking_pick_folder().and_then(|p| p.into_path().ok()).map(|p| p.to_string_lossy().into_owned())
 }
 
-#[tauri::command]
-fn set_hits(st: State<'_, Shared>, rects: Vec<[f64; 4]>) {
-    *st.hits.lock().unwrap() = rects;
-}
-
-/// Ada açılınca odağı alır; önceki pencereyi hatırlar ki kapanınca odak ona dönsün.
-#[tauri::command]
-fn focus_window(app: AppHandle, st: State<'_, Shared>) {
-    let Some(w) = app.get_webview_window("main") else { return };
-    if w.is_focused().unwrap_or(false) {
-        return;
-    }
-    *st.prev_fg.lock().unwrap() = win::foreground();
+/// Ana pencereyi gösterir ve öne getirir. `target`: seçilecek oturum (session id ya da sekme id).
+pub fn show_app(app: &AppHandle, target: Option<String>) {
+    let Some(w) = app.get_webview_window("app") else { return };
+    let _ = w.unminimize();
+    let _ = w.show();
     let _ = w.set_focus();
+    if let Some(t) = target {
+        let _ = app.emit_to("app", "select", t);
+    }
 }
 
-/// Kısayolla kapanınca odağı önceki uygulamaya geri verir.
-#[tauri::command]
-fn release_focus(app: AppHandle, st: State<'_, Shared>) {
-    let prev = std::mem::take(&mut *st.prev_fg.lock().unwrap());
-    let focused = app.get_webview_window("main").and_then(|w| w.is_focused().ok()).unwrap_or(false);
-    if prev != 0 && focused {
-        win::restore_foreground(prev);
+/// Kısayol ve tepsi: ana pencere öndeyse gizler, değilse gösterir.
+fn toggle_app(app: &AppHandle) {
+    let Some(w) = app.get_webview_window("app") else { return };
+    let front = w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false) && !w.is_minimized().unwrap_or(false);
+    if front {
+        let _ = w.hide();
+    } else {
+        show_app(app, None);
     }
+}
+
+#[tauri::command]
+fn open_app(app: AppHandle, target: Option<String>) {
+    show_app(&app, target);
+}
+
+#[tauri::command]
+fn hide_app(app: AppHandle) {
+    if let Some(w) = app.get_webview_window("app") {
+        let _ = w.hide();
+    }
+}
+
+/// Yüzen ada modunda bar arayüzü hap boyutunu bildirir; pencere tam o boya getirilir.
+#[tauri::command]
+fn bar_size(app: AppHandle, st: State<'_, Shared>, w: f64, h: f64) {
+    let changed = {
+        let mut p = st.pill.lock().unwrap();
+        let c = (p.0 - w).abs() > 0.5 || (p.1 - h).abs() > 0.5;
+        *p = (w, h);
+        c
+    };
+    if changed && !st.settings.lock().unwrap().bar {
+        place(&app, &st);
+    }
+}
+
+/// Windows bildirimi (hatırlatıcılar, biten işler).
+#[tauri::command]
+fn notify(app: AppHandle, title: String, body: String) {
+    use tauri_plugin_notification::NotificationExt;
+    let _ = app.notification().builder().title(title).body(body).show();
 }
 
 #[tauri::command]
 fn ready(app: AppHandle, st: State<'_, Shared>) {
     place(&app, &st);
-    if let Some(w) = app.get_webview_window("main") {
+    if let Some(w) = app.get_webview_window("bar") {
         win::set_visible(&w, true);
     }
 }
@@ -332,15 +363,15 @@ fn quit(app: AppHandle, st: State<'_, Shared>) {
 
 fn shutdown(app: &AppHandle, st: &Shared) {
     pty::kill_all(st);
-    if let Some(w) = app.get_webview_window("main") {
+    if let Some(w) = app.get_webview_window("bar") {
         win::appbar_remove(&w);
     }
 }
 
-/// Pencereyi moda göre yerleştirir: status bar ise ekranın tüm genişliği ve üstte ayrılmış
-/// şerit, yüzen ada ise üst ortada sabit kutu.
+/// Bar penceresini yerleştirir: status bar ise ana ekranın üstünde tam genişlik şerit
+/// (AppBar ile yer ayrılır), yüzen ada ise üst ortada hap boyunda küçük pencere.
 fn place(app: &AppHandle, st: &Shared) {
-    let Some(w) = app.get_webview_window("main") else { return };
+    let Some(w) = app.get_webview_window("bar") else { return };
     let mon = w.primary_monitor().ok().flatten().or_else(|| w.current_monitor().ok().flatten());
     let Some(mon) = mon else { return };
     let scale = mon.scale_factor();
@@ -350,48 +381,32 @@ fn place(app: &AppHandle, st: &Shared) {
 
     let bar = st.settings.lock().unwrap().bar;
     let (x, width, height) = if bar {
-        win::appbar_set(&w, mx, my, mw, (BAR_H * scale).round() as i32);
-        (mx, mw, ((BAR_H + DROP_H) * scale).round() as i32)
+        let h = (BAR_H * scale).round() as i32;
+        win::appbar_set(&w, mx, my, mw, h);
+        (mx, mw, h)
     } else {
         win::appbar_remove(&w);
-        let fw = (FLOAT_W * scale).round() as i32;
-        (mx + (mw - fw) / 2, fw, (FLOAT_H * scale).round() as i32)
+        let (pw, ph) = *st.pill.lock().unwrap();
+        let fw = (pw * scale).round() as i32;
+        (mx + (mw - fw) / 2, fw, (ph * scale).round() as i32)
     };
     let _ = w.set_size(PhysicalSize::new(width as u32, height as u32));
     let _ = w.set_position(PhysicalPosition::new(x, my));
     let _ = app.emit("layout", bar);
 }
 
-/// İmleç tıklanabilir alanlardan birindeyse pencere tıklama alır, değilse tıklamalar alttaki
-/// uygulamaya geçer. Status bar modunda tam ekran uygulama açılınca bar gizlenir.
+/// Status bar modunda öndeki uygulama tam ekrana geçince (video, oyun) barı gizler.
 fn poller(app: AppHandle, st: Shared) {
     std::thread::spawn(move || {
-        let mut last_inside: Option<bool> = None;
         let mut last_fs = false;
-        let mut tick: u32 = 0;
         loop {
-            std::thread::sleep(Duration::from_millis(40));
-            tick = tick.wrapping_add(1);
-            let Some(w) = app.get_webview_window("main") else { continue };
-
-            if tick % 12 == 0 {
-                let bar = st.settings.lock().unwrap().bar;
-                let fs = bar && win::fullscreen_app(&w, *st.monitor.lock().unwrap());
-                if fs != last_fs {
-                    win::set_visible(&w, !fs);
-                    last_fs = fs;
-                }
-            }
-
-            let (Ok(c), Ok(p), Ok(scale)) = (app.cursor_position(), w.outer_position(), w.scale_factor()) else {
-                continue;
-            };
-            let lx = (c.x - p.x as f64) / scale;
-            let ly = (c.y - p.y as f64) / scale;
-            let inside = st.hits.lock().unwrap().iter().any(|[x, y, w, h]| lx >= *x && lx <= x + w && ly >= *y && ly <= y + h);
-            if last_inside != Some(inside) {
-                win::click_through(&w, !inside);
-                last_inside = Some(inside);
+            std::thread::sleep(Duration::from_millis(500));
+            let Some(w) = app.get_webview_window("bar") else { continue };
+            let bar = st.settings.lock().unwrap().bar;
+            let fs = bar && win::fullscreen_app(&w, *st.monitor.lock().unwrap());
+            if fs != last_fs {
+                win::set_visible(&w, !fs);
+                last_fs = fs;
             }
         }
     });
@@ -402,7 +417,7 @@ fn tray(app: &tauri::App) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
-    let toggle = MenuItem::with_id(app, "toggle", "Paneli aç / kapat", true, Some("Ctrl+Alt+Space"))?;
+    let toggle = MenuItem::with_id(app, "toggle", "Ada'yı aç", true, Some("Ctrl+Alt+Space"))?;
     let settings = MenuItem::with_id(app, "settings", "Ayarlar", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Ada'yı kapat", true, None::<&str>)?;
@@ -413,11 +428,10 @@ fn tray(app: &tauri::App) -> tauri::Result<()> {
         b = b.icon(icon.clone());
     }
     b.on_menu_event(|app, e| match e.id.as_ref() {
-        "toggle" => {
-            let _ = app.emit("toggle", ());
-        }
+        "toggle" => show_app(app, None),
         "settings" => {
-            let _ = app.emit("open-settings", ());
+            show_app(app, None);
+            let _ = app.emit_to("app", "open-settings", ());
         }
         "quit" => {
             let st = app.state::<Shared>().inner().clone();
@@ -428,7 +442,7 @@ fn tray(app: &tauri::App) -> tauri::Result<()> {
     })
     .on_tray_icon_event(|tray, e| {
         if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = e {
-            let _ = tray.app_handle().emit("toggle", ());
+            toggle_app(tray.app_handle());
         }
     })
     .build(app)?;
@@ -438,15 +452,14 @@ fn tray(app: &tauri::App) -> tauri::Result<()> {
 fn main() {
     let app = tauri::Builder::default()
         // İkinci kez açılırsa yeni kopya başlamaz, açık olanın paneli açılır.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            let _ = app.emit("toggle", ());
-        }))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_app(app, None)))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
                     if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        let _ = app.emit("toggle", ());
+                        toggle_app(app);
                     }
                 })
                 .build(),
@@ -465,8 +478,7 @@ fn main() {
                 ptys: Mutex::new(HashMap::new()),
                 agents: Mutex::new(HashMap::new()),
                 settings: Mutex::new(settings),
-                hits: Mutex::new(Vec::new()),
-                prev_fg: Mutex::new(0),
+                pill: Mutex::new((160.0, 34.0)),
                 monitor: Mutex::new((0, 0, 0, 0)),
                 dir,
                 hub: remote::Hub::default(),
@@ -474,9 +486,6 @@ fn main() {
             });
             app.manage(st.clone());
 
-            if let Some(w) = app.get_webview_window("main") {
-                win::click_through(&w, true);
-            }
             if let Err(e) = app.global_shortcut().register(SHORTCUT) {
                 eprintln!("Kısayol kaydedilemedi ({SHORTCUT}): {e}");
             }
@@ -497,6 +506,15 @@ fn main() {
             }
             Ok(())
         })
+        // Ana pencere kapatılınca gizlenir; oturumlar arkada çalışmaya devam eder.
+        .on_window_event(|w, e| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = e {
+                if w.label() == "app" {
+                    api.prevent_close();
+                    let _ = w.hide();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             get_state,
             tab_create,
@@ -514,9 +532,10 @@ fn main() {
             idle_seconds,
             log,
             pick_folder,
-            set_hits,
-            focus_window,
-            release_focus,
+            open_app,
+            hide_app,
+            bar_size,
+            notify,
             ready,
             quit
         ])
