@@ -73,9 +73,11 @@ pub fn spawn(app: &AppHandle, st: &Shared, id: &str, cwd: &str, args: Vec<String
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
     let killer = child.clone_killer();
     st.ptys.lock().unwrap().insert(id.to_string(), Pty { master: pair.master, writer, killer });
+    st.hub.size(id, cols, rows);
 
     // Çıktıyı okuyup arayüze akıt. UTF-8 karakterleri parça sınırında bölünebilir, artanı sakla.
     let app2 = app.clone();
+    let st2 = st.clone();
     let id2 = id.to_string();
     std::thread::spawn(move || {
         let mut buf = [0u8; 16384];
@@ -93,6 +95,8 @@ pub fn spawn(app: &AppHandle, st: &Shared, id: &str, cwd: &str, args: Vec<String
                     let data = String::from_utf8_lossy(&pending[..valid]).into_owned();
                     pending.drain(..valid);
                     if !data.is_empty() {
+                        // Telefon tamponu ve canlı akış; sonra masaüstü terminali.
+                        st2.hub.pty(&id2, &data);
                         let _ = app2.emit("pty", Data { id: &id2, data });
                     }
                 }
@@ -107,25 +111,36 @@ pub fn spawn(app: &AppHandle, st: &Shared, id: &str, cwd: &str, args: Vec<String
     std::thread::spawn(move || {
         let _ = child.wait();
         st3.ptys.lock().unwrap().remove(&id3);
-        if let Some(t) = st3.tabs.lock().unwrap().iter_mut().find(|t| t.id == id3) {
+        let tab = st3.tabs.lock().unwrap().iter_mut().find(|t| t.id == id3).map(|t| {
             t.alive = false;
-        }
+            t.clone()
+        });
         save_tabs(&st3);
+        st3.hub.pty(&id3, "\r\n\x1b[90m[oturum kapandı]\x1b[0m\r\n");
         let _ = app3.emit("pty-exit", &id3);
+        if let Some(t) = tab {
+            st3.hub.send("tab", &t);
+        }
     });
     Ok(())
 }
 
-pub fn write(st: &Shared, id: &str, data: &str) {
-    if let Some(p) = st.ptys.lock().unwrap().get_mut(id) {
-        let _ = p.writer.write_all(data.as_bytes());
-        let _ = p.writer.flush();
+/// Sekme çalışmıyorsa false döner.
+pub fn write(st: &Shared, id: &str, data: &str) -> bool {
+    match st.ptys.lock().unwrap().get_mut(id) {
+        Some(p) => p.writer.write_all(data.as_bytes()).and_then(|_| p.writer.flush()).is_ok(),
+        None => false,
     }
 }
 
 pub fn resize(st: &Shared, id: &str, cols: u16, rows: u16) {
-    if let Some(p) = st.ptys.lock().unwrap().get(id) {
-        let _ = p.master.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 });
+    let ok = match st.ptys.lock().unwrap().get(id) {
+        Some(p) => p.master.resize(PtySize { rows, cols, pixel_width: 0, pixel_height: 0 }).is_ok(),
+        None => false,
+    };
+    // ptys kilidi bırakıldıktan sonra (kilit sırası: Hub en dışta).
+    if ok {
+        st.hub.size(id, cols, rows);
     }
 }
 

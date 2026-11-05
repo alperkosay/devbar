@@ -32,6 +32,10 @@ pub struct Settings {
     /// Son açılan klasörler, en yeni başta.
     pub recent: Vec<String>,
     pub reminders: Vec<Reminder>,
+    /// Telefon erişimi (LAN'da PWA + API). Varsayılan kapalı.
+    pub remote: bool,
+    /// Telefonun API'ye erişmek için kullandığı gizli anahtar (64 hex karakter).
+    pub remote_token: String,
 }
 
 impl Default for Settings {
@@ -55,6 +59,8 @@ impl Default for Settings {
                 r("stand", "stand", "Ayağa kalk, biraz yürü", 60, true),
                 r("eye", "eye", "20 saniye uzağa bak", 20, false),
             ],
+            remote: false,
+            remote_token: String::new(),
         }
     }
 }

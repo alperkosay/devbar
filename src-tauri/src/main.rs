@@ -3,6 +3,7 @@
 
 mod hooks;
 mod pty;
+mod remote;
 mod store;
 mod win;
 
@@ -35,8 +36,18 @@ pub struct AppState {
     /// Ana monitör, fiziksel piksel: x, y, w, h.
     pub monitor: Mutex<(i32, i32, i32, i32)>,
     pub dir: PathBuf,
+    /// Telefonlara giden olaylar ve sekmelerin ekran tamponu.
+    pub hub: remote::Hub,
+    /// Masaüstü terminalinin son boyutu (sütun, satır). Telefondan açılan sekmeler bununla başlar.
+    pub term_size: Mutex<(u16, u16)>,
 }
 pub type Shared = Arc<AppState>;
+
+/// Olayı hem masaüstü arayüzüne hem bağlı telefonlara yollar.
+pub fn emit<T: Serialize + Clone>(app: &AppHandle, st: &AppState, event: &str, payload: T) {
+    st.hub.send(event, &payload);
+    let _ = app.emit(event, payload);
+}
 
 pub fn save_tabs(st: &AppState) {
     let tabs = st.tabs.lock().unwrap();
@@ -67,9 +78,8 @@ fn get_state(st: State<'_, Shared>) -> Snapshot {
     }
 }
 
-/// Yeni sekme kaydı açar (süreç henüz başlamaz; arayüz terminal boyutunu ölçünce tab_start çağırır).
-#[tauri::command]
-fn tab_create(st: State<'_, Shared>, cwd: Option<String>) -> Result<Tab, String> {
+/// Yeni sekme kaydı açar (süreç henüz başlamaz). Masaüstünden ve telefondan ortak kullanılır.
+pub fn create_tab(app: &AppHandle, st: &Shared, cwd: Option<String>) -> Result<Tab, String> {
     let dir = cwd.filter(|c| !c.trim().is_empty()).unwrap_or_else(|| st.settings.lock().unwrap().cwd.clone());
     if !Path::new(&dir).is_dir() {
         return Err(format!("Klasör bulunamadı: {dir}"));
@@ -81,7 +91,7 @@ fn tab_create(st: State<'_, Shared>, cwd: Option<String>) -> Result<Tab, String>
         ..Default::default()
     };
     st.tabs.lock().unwrap().push(tab.clone());
-    save_tabs(&st);
+    save_tabs(st);
     {
         let mut s = st.settings.lock().unwrap();
         let n = store::norm_path(&dir);
@@ -89,13 +99,13 @@ fn tab_create(st: State<'_, Shared>, cwd: Option<String>) -> Result<Tab, String>
         s.recent.insert(0, dir);
         s.recent.truncate(8);
     }
-    save_settings_file(&st);
+    save_settings_file(st);
+    emit(app, st, "tab", tab.clone());
     Ok(tab)
 }
 
 /// Sekmenin claude sürecini başlatır. Daha önce kullanılmışsa `--resume` ile devam eder.
-#[tauri::command]
-fn tab_start(app: AppHandle, st: State<'_, Shared>, id: String, cols: u16, rows: u16) -> Result<Tab, String> {
+pub fn start_tab(app: &AppHandle, st: &Shared, id: &str, cols: u16, rows: u16) -> Result<Tab, String> {
     let settings = st.settings.lock().unwrap().clone();
     let (tab, args) = {
         let mut tabs = st.tabs.lock().unwrap();
@@ -129,14 +139,31 @@ fn tab_start(app: AppHandle, st: State<'_, Shared>, id: String, cols: u16, rows:
         t.started = now();
         (t.clone(), args)
     };
-    if let Err(e) = pty::spawn(&app, &st, &id, &tab.cwd, args, cols.max(20), rows.max(5)) {
-        if let Some(t) = st.tabs.lock().unwrap().iter_mut().find(|t| t.id == id) {
+    // Önce sekme olayı: masaüstü terminali, çıktı akmaya başlamadan hazır olsun.
+    emit(app, st, "tab", tab.clone());
+    if let Err(e) = pty::spawn(app, st, id, &tab.cwd, args, cols.max(20), rows.max(5)) {
+        let failed = st.tabs.lock().unwrap().iter_mut().find(|t| t.id == id).map(|t| {
             t.alive = false;
+            t.clone()
+        });
+        if let Some(t) = failed {
+            emit(app, st, "tab", t);
         }
         return Err(e);
     }
-    save_tabs(&st);
+    save_tabs(st);
     Ok(tab)
+}
+
+#[tauri::command]
+fn tab_create(app: AppHandle, st: State<'_, Shared>, cwd: Option<String>) -> Result<Tab, String> {
+    create_tab(&app, &st, cwd)
+}
+
+#[tauri::command]
+fn tab_start(app: AppHandle, st: State<'_, Shared>, id: String, cols: u16, rows: u16) -> Result<Tab, String> {
+    *st.term_size.lock().unwrap() = (cols.max(20), rows.max(5));
+    start_tab(&app, &st, &id, cols, rows)
 }
 
 #[tauri::command]
@@ -153,8 +180,10 @@ fn tab_close(app: AppHandle, st: State<'_, Shared>, id: String) {
         ids
     };
     for r in removed {
-        let _ = app.emit("agent-remove", r);
+        emit(&app, &st, "agent-remove", r);
     }
+    st.hub.forget(&id);
+    st.hub.send("tab-remove", &id);
 }
 
 #[tauri::command]
@@ -164,7 +193,9 @@ fn pty_write(st: State<'_, Shared>, id: String, data: String) {
 
 #[tauri::command]
 fn pty_resize(st: State<'_, Shared>, id: String, cols: u16, rows: u16) {
-    pty::resize(&st, &id, cols.max(20), rows.max(5));
+    let size = (cols.max(20), rows.max(5));
+    *st.term_size.lock().unwrap() = size;
+    pty::resize(&st, &id, size.0, size.1);
 }
 
 #[tauri::command]
@@ -175,13 +206,52 @@ fn agent_read(st: State<'_, Shared>, id: String) {
 }
 
 #[tauri::command]
-fn save_settings(app: AppHandle, st: State<'_, Shared>, settings: Settings) {
-    let bar_changed = st.settings.lock().unwrap().bar != settings.bar;
+fn save_settings(app: AppHandle, st: State<'_, Shared>, mut settings: Settings) {
+    let bar_changed = {
+        let cur = st.settings.lock().unwrap();
+        // Bu alanları arka uç yönetir; arayüzdeki eski kopya üzerine yazmasın.
+        settings.recent = cur.recent.clone();
+        settings.remote = cur.remote;
+        settings.remote_token = cur.remote_token.clone();
+        cur.bar != settings.bar
+    };
     *st.settings.lock().unwrap() = settings;
     save_settings_file(&st);
     if bar_changed {
         place(&app, &st);
     }
+}
+
+#[tauri::command]
+fn remote_status(st: State<'_, Shared>) -> remote::Info {
+    remote::info(&st)
+}
+
+/// Telefon erişimini açar ya da kapatır. İlk açılışta token üretilir.
+#[tauri::command]
+fn remote_set(app: AppHandle, st: State<'_, Shared>, on: bool) -> Result<remote::Info, String> {
+    {
+        let mut s = st.settings.lock().unwrap();
+        s.remote = on;
+        if on && s.remote_token.is_empty() {
+            s.remote_token = remote::new_token();
+        }
+    }
+    let res = remote::apply(&app, &st);
+    if res.is_err() {
+        st.settings.lock().unwrap().remote = false;
+    }
+    save_settings_file(&st);
+    res.map(|_| remote::info(&st))
+}
+
+/// Yeni token üretir; eski token'la bağlı telefonların akışı kesilir.
+#[tauri::command]
+fn remote_regen(st: State<'_, Shared>) -> remote::Info {
+    st.settings.lock().unwrap().remote_token = remote::new_token();
+    save_settings_file(&st);
+    st.hub.disconnect_all();
+    remote::info(&st)
 }
 
 #[tauri::command]
@@ -357,6 +427,8 @@ fn main() {
                 prev_fg: Mutex::new(0),
                 monitor: Mutex::new((0, 0, 0, 0)),
                 dir,
+                hub: remote::Hub::default(),
+                term_size: Mutex::new((110, 32)),
             });
             app.manage(st.clone());
 
@@ -367,6 +439,16 @@ fn main() {
                 eprintln!("Kısayol kaydedilemedi ({SHORTCUT}): {e}");
             }
             hooks::serve(app.handle().clone(), st.clone());
+            // Ayarda açık bırakıldıysa telefon erişimini başlat. İlk açılışta token yoksa üret.
+            {
+                let mut s = st.settings.lock().unwrap();
+                if s.remote && s.remote_token.is_empty() {
+                    s.remote_token = remote::new_token();
+                }
+            }
+            if let Err(e) = remote::apply(app.handle(), &st) {
+                eprintln!("Telefon erişimi açılamadı: {e}");
+            }
             poller(app.handle().clone(), st);
             Ok(())
         })
@@ -381,6 +463,9 @@ fn main() {
             save_settings,
             hooks_install,
             hooks_uninstall,
+            remote_status,
+            remote_set,
+            remote_regen,
             idle_seconds,
             log,
             pick_folder,

@@ -4,7 +4,7 @@ use crate::{save_tabs, Shared};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
 pub const PORT: u16 = 47821;
 const MARK: &str = "127.0.0.1:47821/hook";
@@ -140,11 +140,11 @@ fn handle(app: &AppHandle, st: &Shared, v: &Value) {
         out
     };
     for r in removed {
-        let _ = app.emit("agent-remove", r);
+        crate::emit(app, st, "agent-remove", r);
     }
     #[cfg(debug_assertions)]
     eprintln!("hook {event:<16} {} [{}] {} tab={:?}", agent.project, agent.status, agent.activity, agent.tab);
-    let _ = app.emit("agent", agent);
+    crate::emit(app, st, "agent", agent);
 }
 
 /// Hook'un geldiği oturumu bir Ada sekmesine bağlar: önce session id ile, olmazsa aynı

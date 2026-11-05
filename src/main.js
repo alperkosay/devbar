@@ -29,6 +29,7 @@ const S = {
   picking: false,
   peekW: 150,
   remind: null, // gösterilen hatırlatıcı
+  remote: null, // telefon erişimi durumu (remote_status)
 };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -310,11 +311,55 @@ function settingsHtml() {
     <div class="row"><div class="lbl"><b>Model</b><span>Varsayılan, Claude Code ayarını kullanır</span></div>
       ${seg('model', [['', 'Varsayılan'], ['opus', 'Opus'], ['sonnet', 'Sonnet'], ['haiku', 'Haiku']])}</div>
     <div class="row"><div class="lbl"><b>Claude hook'ları</b><span>Tüm oturumların canlı durumu için</span></div><div class="keys">${hooksCtl}</div></div>
+    ${remoteHtml()}
     <div class="row"><div class="lbl"><b>Hatırlatıcılar</b><span>Bilgisayar başında değilsen sayaç durur</span></div></div>
     ${rems}
     <div class="row"><div class="lbl"><b>Kısayol</b><span>Her yerden aç ve kapat</span></div><div class="keys"><kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>Space</kbd></div></div>
     <div class="row"><div class="lbl"><b>Uygulama</b><span>Açık terminaller kapanır</span></div><button class="danger" data-act="quit">${I.power}<span>Ada'yı kapat</span></button></div>
   </div>`;
+}
+
+// Telefon erişimi: açıkken QR kod. QR, adresi ve token'ı taşır; telefon okutunca bağlanır.
+function remoteHtml() {
+  const r = S.remote;
+  const on = !!r?.on;
+  const row = `<div class="row"><div class="lbl"><b>Telefon erişimi</b><span>Ev ağında telefondan oturumları izle, yanıtla, yeni oturum aç</span></div>
+    <button class="switch ${on ? 'on' : ''}" data-act="remote-toggle" title="${on ? 'Kapat' : 'Aç'}"></button></div>`;
+  if (!on) return row;
+  let body;
+  if (!r.running) {
+    body = `<div class="rtext"><b class="err">Port ${r.port} açılamadı</b><span>Başka bir uygulama kullanıyor olabilir. Kapatıp tekrar aç.</span></div>`;
+  } else if (!r.url) {
+    body = `<div class="rtext"><b class="err">Yerel ağ adresi bulunamadı</b><span>Bilgisayar bir Wi-Fi ya da kablolu ağa bağlı mı?</span></div>`;
+  } else {
+    let qr = '';
+    try {
+      const q = qrcode(0, 'M');
+      q.addData(r.url);
+      q.make();
+      qr = q.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+    } catch (e) {
+      invoke('log', { msg: 'qr: ' + e });
+    }
+    const addr = r.url.split('#')[0];
+    body = `<div class="qr">${qr}</div>
+      <div class="rtext">
+        <b>${I.phone}Telefonun kamerasıyla okut</b>
+        <span>Telefon aynı Wi-Fi'da olmalı. Adres: <code>${esc(addr)}</code></span>
+        <span>İlk açılışta Windows güvenlik duvarı izin isteyebilir; <b>Özel ağlar</b>'a izin ver.</span>
+        <span>QR'ı kimseyle paylaşma: içindeki token oturumlarına yazma izni verir.</span>
+        <button class="mini" data-act="remote-regen">${I.refresh}<span>Token'ı yenile</span></button>
+      </div>`;
+  }
+  return row + `<div class="remote">${body}</div>`;
+}
+
+async function loadRemote() {
+  try {
+    S.remote = await invoke('remote_status');
+  } catch (e) {
+    invoke('log', { msg: 'remote_status: ' + e });
+  }
 }
 
 let toastTimer;
@@ -421,11 +466,22 @@ async function startTab(tab) {
   t.term.focus();
 }
 
+// Sekmeyi listeye ekler ya da günceller (olay ve komut cevabı hangi sırayla gelirse gelsin tek kayıt).
+function upsertTab(tab) {
+  const cur = S.tabs.find((t) => t.id === tab.id);
+  if (cur) {
+    const changed = cur.alive !== tab.alive;
+    Object.assign(cur, tab);
+    return { tab: cur, isNew: false, changed };
+  }
+  S.tabs.push(tab);
+  S.settings.recent = [tab.cwd, ...S.settings.recent.filter((r) => r.toLowerCase() !== tab.cwd.toLowerCase())].slice(0, 8);
+  return { tab, isNew: true, changed: true };
+}
+
 async function newTab(cwd) {
   try {
-    const tab = await invoke('tab_create', { cwd });
-    S.tabs.push(tab);
-    S.settings.recent = [cwd, ...S.settings.recent.filter((r) => r.toLowerCase() !== cwd.toLowerCase())].slice(0, 8);
+    const { tab } = upsertTab(await invoke('tab_create', { cwd }));
     await startTab(tab);
   } catch (e) {
     toast(e);
@@ -529,8 +585,9 @@ $('btn-all').addEventListener('click', () => {
   S.view = S.view === 'all' ? (curTab() ? 'term' : 'new') : 'all';
   renderAll();
 });
-$('btn-settings').addEventListener('click', () => {
+$('btn-settings').addEventListener('click', async () => {
   S.view = S.view === 'settings' ? (curTab() ? 'term' : 'new') : 'settings';
+  if (S.view === 'settings') await loadRemote();
   renderAll();
 });
 
@@ -607,6 +664,17 @@ viewEl.addEventListener('click', async (e) => {
       toast(err);
     }
     renderBody();
+  } else if (act === 'remote-toggle') {
+    try {
+      S.remote = await invoke('remote_set', { on: !S.remote?.on });
+    } catch (err) {
+      toast(err);
+      await loadRemote();
+    }
+    renderBody();
+  } else if (act === 'remote-regen') {
+    S.remote = await invoke('remote_regen');
+    renderBody();
   } else if (act === 'quit') {
     invoke('quit');
   }
@@ -642,6 +710,22 @@ T.event.listen('pty-exit', ({ payload: id }) => {
   if (tab) tab.alive = false;
   terms.get(id)?.term.write('\r\n\x1b[90m[oturum kapandı]\x1b[0m\r\n');
   if (S.open) renderAll();
+});
+
+// Sekme açıldı, başladı ya da kapandı. Telefondan açılan sekmeyi masaüstü burada öğrenir;
+// terminali hemen kurulur ki ilk çıktı kaçmasın (görünür olunca fit edilir).
+T.event.listen('tab', ({ payload }) => {
+  const { tab, isNew, changed } = upsertTab(payload);
+  if (isNew) {
+    const ref = terms.get(S.selected) || [...terms.values()][0];
+    const t = ensureTerm(tab.id);
+    if (ref) t.term.resize(ref.term.cols, ref.term.rows);
+  }
+  if (!changed) return;
+  if (S.open) {
+    renderChips();
+    if (S.view === 'term' && S.selected === tab.id) renderBody();
+  }
 });
 
 T.event.listen('agent', ({ payload: a }) => {
