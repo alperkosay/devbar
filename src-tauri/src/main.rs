@@ -373,38 +373,65 @@ fn apply_theme(app: &AppHandle, st: &Shared) {
     }
 }
 
-/// Ana pencereyi gösterir ve öne getirir. `target`: seçilecek oturum (session id ya da sekme id).
-pub fn show_app(app: &AppHandle, target: Option<String>) {
+/// Çalışma alanını (döşemeli oturum penceresi) gösterir. Çerçevesizdir ve barın hemen altından
+/// başlayıp o ekranın kalan alanını kaplar. `on`: hangi ekrandaki bar (yoksa ana ekran).
+/// `target`: seçilecek oturum (session id ya da sekme id).
+pub fn show_app_on(app: &AppHandle, on: Option<&str>, target: Option<String>) {
     let Some(w) = app.get_webview_window("app") else { return };
+    let bar = on.and_then(|l| app.get_webview_window(l)).or_else(|| app.get_webview_window("bar"));
+    if let Some((x, y, width, height)) = bar.as_ref().and_then(win::work_area) {
+        let _ = w.set_position(PhysicalPosition::new(x, y));
+        let _ = w.set_size(PhysicalSize::new(width as u32, height as u32));
+    }
     let _ = w.unminimize();
     let _ = w.show();
     let _ = w.set_focus();
+    let _ = app.emit("app-visible", true);
     if let Some(t) = target {
         let _ = app.emit_to("app", "select", t);
     }
 }
 
-/// Kısayol ve tepsi: ana pencere öndeyse gizler, değilse gösterir.
-fn toggle_app(app: &AppHandle) {
-    let Some(w) = app.get_webview_window("app") else { return };
-    let front = w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false) && !w.is_minimized().unwrap_or(false);
-    if front {
+pub fn show_app(app: &AppHandle, target: Option<String>) {
+    show_app_on(app, None, target);
+}
+
+fn hide_app_window(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("app") {
         let _ = w.hide();
+    }
+    let _ = app.emit("app-visible", false);
+}
+
+/// Kısayol, tepsi ve bardaki DevBar yazısı: çalışma alanı açıksa kapatır, değilse açar.
+fn toggle_app_on(app: &AppHandle, on: Option<&str>) {
+    let Some(w) = app.get_webview_window("app") else { return };
+    if w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false) {
+        hide_app_window(app);
     } else {
-        show_app(app, None);
+        show_app_on(app, on, None);
     }
 }
 
+fn toggle_app(app: &AppHandle) {
+    toggle_app_on(app, None);
+}
+
 #[tauri::command]
-fn open_app(app: AppHandle, target: Option<String>) {
-    show_app(&app, target);
+fn open_app(app: AppHandle, window: tauri::WebviewWindow, target: Option<String>) {
+    let label = window.label().to_string();
+    let on = label.starts_with("bar").then_some(label);
+    show_app_on(&app, on.as_deref(), target);
 }
 
 #[tauri::command]
 fn hide_app(app: AppHandle) {
-    if let Some(w) = app.get_webview_window("app") {
-        let _ = w.hide();
-    }
+    hide_app_window(&app);
+}
+
+#[tauri::command]
+fn toggle_workspace(app: AppHandle, window: tauri::WebviewWindow) {
+    toggle_app_on(&app, Some(window.label()));
 }
 
 /// Yüzen ada modunda bar arayüzü hap boyutunu bildirir; pencere tam o boya getirilir.
@@ -764,6 +791,7 @@ fn main() {
                 if w.label() == "app" {
                     api.prevent_close();
                     let _ = w.hide();
+                    let _ = w.app_handle().emit("app-visible", false);
                 }
             }
         })
@@ -786,6 +814,7 @@ fn main() {
             pick_folder,
             open_app,
             hide_app,
+            toggle_workspace,
             bar_size,
             notify,
             show_pop,

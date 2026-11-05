@@ -224,3 +224,8 @@ body.float[data-theme="liquid"] .notch { background: linear-gradient(180deg, rgb
 .notch.announce .ic svg { width: 15px; height: 15px; }
 .notch.announce { max-width: 680px; }
 .notch.announce .txt span { max-width: 420px; }
+
+.brand-menu { width: 20px; height: 22px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); margin-left: -4px; margin-right: 4px; position: relative; }
+.brand-menu:hover { background: var(--bar-hover); color: var(--text); }
+.brand-menu svg { width: 12px; height: 12px; }
+.brand-menu.open { color: var(--accent); }

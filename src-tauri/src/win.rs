@@ -149,6 +149,46 @@ pub fn set_visible(win: &WebviewWindow, visible: bool) {
     }
 }
 
+/// Pencerenin bulunduğu monitörün kullanılabilir alanı (fiziksel piksel): görev çubuğu ve
+/// AppBar'ların ayırdığı şeritler hariç. x, y, genişlik, yükseklik.
+pub fn work_area(win: &WebviewWindow) -> Option<(i32, i32, i32, i32)> {
+    #[cfg(windows)]
+    {
+        #[repr(C)]
+        struct MonitorInfo {
+            cb_size: u32,
+            rc_monitor: sys::Rect,
+            rc_work: sys::Rect,
+            flags: u32,
+        }
+        #[link(name = "user32")]
+        extern "system" {
+            fn MonitorFromWindow(hwnd: isize, flags: u32) -> isize;
+            fn GetMonitorInfoW(hmon: isize, info: *mut MonitorInfo) -> i32;
+        }
+        let h = hwnd(win)?;
+        unsafe {
+            let mon = MonitorFromWindow(h, 2);
+            let mut info = MonitorInfo {
+                cb_size: std::mem::size_of::<MonitorInfo>() as u32,
+                rc_monitor: sys::Rect::default(),
+                rc_work: sys::Rect::default(),
+                flags: 0,
+            };
+            if GetMonitorInfoW(mon, &mut info) == 0 {
+                return None;
+            }
+            let r = info.rc_work;
+            Some((r.left, r.top, r.right - r.left, r.bottom - r.top))
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = win;
+        None
+    }
+}
+
 /// Son klavye/fare hareketinden bu yana geçen saniye.
 pub fn idle_seconds() -> u64 {
     #[cfg(windows)]

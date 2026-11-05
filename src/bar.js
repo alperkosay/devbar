@@ -210,9 +210,12 @@ function setLayout(bar) {
 }
 
 // ---------- Tıklamalar ----------
-$('brand').innerHTML = `${I.spark}<span>DevBar</span>${I.down}`;
-$('brand').addEventListener('click', (e) => openSheet('menu', null, e.currentTarget));
-$('brand').addEventListener('dblclick', () => invoke('open_app', { target: null }));
+$('brand').innerHTML = `${I.spark}<span>DevBar</span>`;
+$('brand-menu').innerHTML = I.down;
+$('brand').addEventListener('click', () => invoke('toggle_workspace'));
+$('brand-menu').addEventListener('click', (e) => openSheet('menu', null, e.currentTarget));
+// Çalışma alanı açıkken DevBar yazısının altında çizgi.
+T.event.listen('app-visible', ({ payload }) => $('brand').classList.toggle('open', !!payload));
 indsEl.addEventListener('click', (e) => {
   const b = e.target.closest('[data-kind]');
   if (b) openSheet(b.dataset.kind, null, b);
