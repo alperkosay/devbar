@@ -61,6 +61,7 @@ function render() {
   const p = peekState();
   notch.classList.toggle('busy', p.kind === 'running');
   notch.classList.toggle('waiting', p.kind === 'waiting');
+  notch.classList.toggle('done', p.kind === 'done');
   if (p.kind === 'idle') {
     const dots = p.list.slice(0, 6).map((a) => `<span class="dot ${a.status}"></span>`).join('');
     const label = p.list.length ? `${p.list.length} oturum` : 'Hazır';

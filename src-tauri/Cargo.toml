@@ -1,6 +1,6 @@
 [package]
 name = "devbar"
-version = "0.6.0"
+version = "0.6.1"
 description = "Claude Code ile çalışan geliştiriciler için durum barı"
 edition = "2021"
 

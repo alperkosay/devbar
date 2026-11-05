@@ -36,24 +36,26 @@ html, body { background: transparent; }
 .chip b { font-weight: 500; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
 .chip.waiting { background: rgba(251, 191, 36, 0.13); color: #fde68a; }
 
-/* Ortadaki çentik: en acil oturumun durumu. */
+/* Ortadaki sekme: en acil oturumun durumu. Apple çentiği yerine iki yanı eğik bir trapez;
+   alt kenarındaki çizgi durumu gösterir (mavi çalışıyor, sarı bekliyor, yeşil bitti). */
+:root { --slant: 16px; }
 .notch {
   position: relative;
   height: 100%;
-  min-width: 190px;
-  max-width: 460px;
+  min-width: 220px;
+  max-width: 480px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 9px;
-  padding: 0 18px;
-  background: var(--notch);
-  border-radius: 0 0 13px 13px;
+  padding: 0 calc(var(--slant) + 14px);
+  background: linear-gradient(180deg, #26262f 0%, #1c1c23 100%);
+  clip-path: polygon(0 0, 100% 0, calc(100% - var(--slant)) 100%, var(--slant) 100%);
   white-space: nowrap;
   cursor: pointer;
   transition: background 0.2s;
 }
-.notch:hover { background: #000; }
+.notch:hover { background: linear-gradient(180deg, #2e2e38 0%, #22222a 100%); }
 .notch .ic { display: grid; place-items: center; width: 16px; height: 16px; flex: none; }
 .notch .ic svg { width: 14px; height: 14px; }
 .notch .ic.spark { color: var(--accent); }
@@ -66,45 +68,47 @@ html, body { background: transparent; }
 .notch .dots { display: flex; gap: 4px; }
 .notch .dots .dot { width: 6px; height: 6px; }
 .notch .more { flex: none; font-size: 11px; font-weight: 600; color: var(--blue); background: rgba(96, 165, 250, 0.14); padding: 1px 7px; border-radius: 99px; }
-.notch.busy::after, .notch.waiting::after {
+
+/* Alt kenardaki durum çizgisi ve altından vuran hafif ışık. */
+.notch::after {
   content: "";
   position: absolute;
-  left: 18px;
-  right: 18px;
+  left: var(--slant);
+  right: var(--slant);
   bottom: 0;
   height: 2px;
-  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, rgba(232, 131, 94, 0.55), transparent);
 }
+.notch::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(60% 120% at 50% 120%, var(--glow, transparent), transparent 70%);
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+.notch.busy { --glow: rgba(96, 165, 250, 0.16); }
+.notch.waiting { --glow: rgba(251, 191, 36, 0.2); }
+.notch.done { --glow: rgba(74, 222, 128, 0.14); }
 .notch.busy::after {
   background: linear-gradient(90deg, transparent, var(--blue), transparent) no-repeat;
   background-size: 45% 100%;
   animation: scan 1.8s ease-in-out infinite;
 }
 .notch.waiting::after { background: var(--amber); animation: blink 1.4s ease-in-out infinite; }
+.notch.done::after { background: linear-gradient(90deg, transparent, var(--green), transparent); }
 .notch.flash-done { animation: flash-g 1.6s ease; }
 .notch.flash-waiting { animation: flash-a 1.6s ease; }
 @keyframes scan { from { background-position: -60% 0; } to { background-position: 160% 0; } }
 @keyframes blink { 50% { opacity: 0.25; } }
 @keyframes ring { 0%, 60%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(14deg); } 20%, 40% { transform: rotate(-14deg); } }
-@keyframes flash-g { 30% { box-shadow: inset 0 -2px 0 var(--green), 0 4px 18px rgba(74, 222, 128, 0.35); } }
-@keyframes flash-a { 30% { box-shadow: inset 0 -2px 0 var(--amber), 0 4px 18px rgba(251, 191, 36, 0.35); } }
+@keyframes flash-g { 30% { filter: brightness(1.5); } }
+@keyframes flash-a { 30% { filter: brightness(1.5); } }
 
-/* Yüzen ada modu: bar yok, sadece hap. Pencere hap boyunda. */
+/* Yüzen ada modu: bar yok, sadece sekme. Pencere sekme boyunda. */
 body.float .bar { background: transparent; grid-template-columns: auto; justify-content: center; padding: 0; }
 body.float .side-l, body.float .side-r { display: none; }
-body.float .notch { height: 34px; border-radius: 0 0 17px 17px; margin: 0 12px; }
-body.float .notch::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -12px;
-  right: -12px;
-  height: 12px;
-  background:
-    radial-gradient(circle at 0 100%, transparent 11.5px, var(--notch) 12px) left / 12px 12px no-repeat,
-    radial-gradient(circle at 100% 100%, transparent 11.5px, var(--notch) 12px) right / 12px 12px no-repeat;
-  pointer-events: none;
-}
+body.float .notch { height: 34px; --slant: 18px; }
 
 /* Sol taraf: DevBar menüsü ve geliştirici göstergeleri. */
 .brand svg:last-child { width: 12px; height: 12px; opacity: 0.6; margin-left: -2px; }
@@ -140,4 +144,4 @@ body.float .notch::before {
   height: 30px;
   box-shadow: inset 0 2px 0 var(--accent);
 }
-.notch.open { box-shadow: inset 0 -2px 0 var(--accent); }
+.notch.open { background: linear-gradient(180deg, #2e2e38 0%, #24242c 100%); }
