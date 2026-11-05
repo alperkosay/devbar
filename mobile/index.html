@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a0c">
+  <meta name="color-scheme" content="dark">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Ada">
+  <meta name="description" content="Claude Code oturumların cebinde: izle, yanıtla, yeni oturum aç.">
+  <title>Ada</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="vendor/xterm.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <!-- Liste ekranları: Oturumlar, Yeni, Bağlantı -->
+    <div class="screens" id="screens">
+      <main class="scroll" id="main"></main>
+      <nav class="nav" id="nav"></nav>
+    </div>
+
+    <!-- Sekme ekranı: canlı terminal ve giriş -->
+    <section class="tabv" id="tabv" hidden>
+      <header class="tv-head" id="tv-head"></header>
+      <div class="tv-term" id="tv-term">
+        <div class="tv-inner" id="tv-inner"></div>
+        <div class="tv-over" id="tv-over"></div>
+      </div>
+      <div class="keys" id="keys"></div>
+      <form class="inbar" id="inbar">
+        <textarea id="input" rows="1" placeholder="Claude'a yaz…" enterkeyhint="send" autocomplete="off" autocapitalize="sentences"></textarea>
+        <button type="submit" class="send" id="send" aria-label="Gönder"></button>
+      </form>
+    </section>
+
+    <div class="toast" id="toast" hidden></div>
+  </div>
+
+  <script src="vendor/xterm.js"></script>
+  <script src="icons.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
