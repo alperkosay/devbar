@@ -1,101 +1,86 @@
-// Oturum ve ayar modelleri, JSON dosyalarına okuma/yazma.
+// Ayarlar, sekmeler ve JSON dosyalarına okuma/yazma.
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::path::Path;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn now() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
-/// Akıştaki tek satır: kullanıcı mesajı, Claude metni, araç çağrısı, sonuç, uyarı ya da hata.
 #[derive(Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
-pub struct Item {
-    pub kind: String,
+pub struct Reminder {
+    pub id: String,
+    /// water | stand | eye | bell
+    pub icon: String,
     pub text: String,
-    pub tool: String,
-}
-
-impl Item {
-    pub fn new(kind: &str, text: impl Into<String>) -> Self {
-        Item { kind: kind.into(), text: text.into(), tool: String::new() }
-    }
-    pub fn tool(name: impl Into<String>, text: impl Into<String>) -> Self {
-        Item { kind: "tool".into(), text: text.into(), tool: name.into() }
-    }
+    pub minutes: u32,
+    pub on: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
-    /// Yeni oturumların açılacağı klasör.
+    /// Yeni oturumların varsayılan klasörü.
     pub cwd: String,
-    /// acceptEdits | plan | bypassPermissions
+    /// Boş: Claude Code'un kendi ayarı. Yoksa acceptEdits | plan | bypassPermissions
     pub permission_mode: String,
     /// Boşsa Claude Code'un varsayılanı.
     pub model: String,
+    /// true: ekranın üstünde yer ayıran status bar, false: yüzen ada.
+    pub bar: bool,
+    /// Son açılan klasörler, en yeni başta.
+    pub recent: Vec<String>,
+    pub reminders: Vec<Reminder>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).unwrap_or_else(|_| ".".into());
-        Settings { cwd: home, permission_mode: "acceptEdits".into(), model: String::new() }
+        let r = |id: &str, icon: &str, text: &str, minutes: u32, on: bool| Reminder {
+            id: id.into(),
+            icon: icon.into(),
+            text: text.into(),
+            minutes,
+            on,
+        };
+        Settings {
+            cwd: home,
+            permission_mode: String::new(),
+            model: String::new(),
+            bar: true,
+            recent: Vec::new(),
+            reminders: vec![
+                r("water", "water", "Su iç", 30, true),
+                r("stand", "stand", "Ayağa kalk, biraz yürü", 60, true),
+                r("eye", "eye", "20 saniye uzağa bak", 20, false),
+            ],
+        }
     }
 }
 
+/// Ada içindeki bir terminal sekmesi.
 #[derive(Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
-pub struct Session {
+pub struct Tab {
     pub id: String,
-    pub title: String,
     pub cwd: String,
-    /// Claude Code'un kendi session id'si, `--resume` için.
-    pub claude_id: Option<String>,
-    /// idle | running | done | warn | error
-    pub status: String,
-    /// Kapalı adada görünen kısa durum: "Düzenliyor Kurallar.md".
-    pub activity: String,
-    pub unread: bool,
-    pub created: u64,
-    pub updated: u64,
-    pub cost: f64,
-    pub items: Vec<Item>,
+    /// Claude Code session id. Yeni sekmede Ada üretir (`--session-id`), sonra hook'larla güncellenir.
+    pub claude_id: String,
+    /// İçinde en az bir prompt gönderildi mi; gönderildiyse yeniden açarken `--resume` kullanılır.
+    pub used: bool,
+    /// Süreç çalışıyor mu (diske yazılsa da açılışta false olur).
+    pub alive: bool,
+    pub started: u64,
 }
 
-static SEQ: AtomicU32 = AtomicU32::new(0);
+pub fn folder_name(p: &str) -> String {
+    p.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next().unwrap_or(p).to_string()
+}
 
-impl Session {
-    pub fn new(cwd: &str, prompt: &str) -> Self {
-        let first = prompt.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
-        let t = now();
-        Session {
-            id: format!("s{}-{}", t, SEQ.fetch_add(1, Ordering::Relaxed)),
-            title: truncate(first, 48),
-            cwd: cwd.into(),
-            status: "idle".into(),
-            created: t,
-            updated: t,
-            ..Default::default()
-        }
-    }
-
-    /// Akış satırları olmadan kopya; olaylarla her seferinde tüm geçmişi göndermemek için.
-    pub fn meta(&self) -> Session {
-        Session {
-            id: self.id.clone(),
-            title: self.title.clone(),
-            cwd: self.cwd.clone(),
-            claude_id: self.claude_id.clone(),
-            status: self.status.clone(),
-            activity: self.activity.clone(),
-            unread: self.unread,
-            created: self.created,
-            updated: self.updated,
-            cost: self.cost,
-            items: Vec::new(),
-        }
-    }
+/// Klasör karşılaştırması için: küçük harf, ters bölü, sonda ayraç yok.
+pub fn norm_path(p: &str) -> String {
+    p.replace('/', "\\").trim_end_matches('\\').to_lowercase()
 }
 
 pub fn truncate(s: &str, max: usize) -> String {
@@ -111,7 +96,7 @@ pub fn load<T: DeserializeOwned + Default>(path: &Path) -> T {
 }
 
 pub fn save<T: Serialize>(path: &Path, value: &T) {
-    let Ok(json) = serde_json::to_string(value) else { return };
+    let Ok(json) = serde_json::to_string_pretty(value) else { return };
     let tmp = path.with_extension("tmp");
     if std::fs::write(&tmp, json).is_ok() {
         let _ = std::fs::rename(&tmp, path);
