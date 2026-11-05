@@ -162,28 +162,17 @@ function flash(kind) {
 
 // ---------- Status bar ----------
 const RICON = { water: I.water, stand: I.stand, eye: I.eye, bell: I.bell };
+// Sade: solda marka, sağda oturumlar. Saat ve hatırlatıcı sayaçları sistemde zaten var.
 function renderBar() {
   if (!S.settings.bar) return;
-  const rem = S.settings.reminders
-    .filter((r) => r.on && next[r.id])
-    .map((r) => {
-      const min = Math.max(0, Math.ceil((next[r.id] - Date.now()) / 60000));
-      return `<span class="tb-chip ${r.icon}" title="${esc(r.text)}">${RICON[r.icon] || I.bell}<span class="muted">${min} dk</span></span>`;
-    })
-    .join('');
-  $('tb-left').innerHTML = `<span class="tb-brand">${I.spark}Ada</span>${rem}`;
-
-  const agents = visibleAgents().slice(0, 6);
-  const chips = agents
+  $('tb-left').innerHTML = `<span class="tb-brand">${I.spark}Ada</span>`;
+  const agents = visibleAgents().slice(0, 8);
+  $('tb-right').innerHTML = agents
     .map(
       (a) =>
         `<button class="tb-chip agent ${a.status}" data-sid="${esc(a.sessionId)}" title="${esc(a.cwd)}\n${esc(a.activity)}"><span class="dot ${a.status}"></span><b>${esc(a.project)}</b></button>`,
     )
     .join('');
-  const d = new Date();
-  const clock = d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-  const date = d.toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' });
-  $('tb-right').innerHTML = `${chips}${chips ? '<span class="tb-sep"></span>' : ''}<span class="tb-date">${date}</span><span class="tb-clock">${clock}</span>`;
 }
 $('tb-right').addEventListener('click', (e) => {
   const b = e.target.closest('[data-sid]');
