@@ -41,7 +41,7 @@ function dockerByPort() {
 const tabOf = (a) => (a?.tab ? P.tabs.find((t) => t.id === a.tab) || null : null);
 
 function head(icon, color, title, sub, tools = '') {
-  const back = P.fromMenu ? `<button class="back" data-nav="menu" title="Menü">${I.left}</button>` : '';
+  const back = P.backTo ? `<button class="back" data-nav="${P.backTo}" title="Geri">${I.left}</button>` : '';
   return `<div class="sh-head">${back}<span class="ic ${color}">${icon}</span><span class="tt"><b>${title}</b><span>${sub}</span></span>${tools}</div>`;
 }
 
@@ -240,6 +240,23 @@ function newView() {
     <div class="foot"><button class="tool" data-app="pick">${I.folder}Başka klasör…</button></div>`;
 }
 
+// Barda sığmayan oturumlar dahil hepsi: en acil olan en üstte.
+function sessionsView() {
+  const list = sortedAgents(P.agents);
+  const waiting = list.filter((a) => a.status === 'waiting').length;
+  const rows = list
+    .map(
+      (a) => `<button class="row" data-sess="${esc(a.sessionId)}" style="text-align:left">
+        <span class="dot ${a.status}" style="margin:0 4px"></span>
+        <div class="main"><div class="l1"><b>${esc(nameOf(a))}</b><span class="badge">${a.tab ? 'DevBar' : 'Terminal'}</span></div>
+          <div class="l2">${esc(a.short || a.activity)}</div>${a.prompt ? `<div class="l3">${esc(a.prompt)}</div>` : ''}</div>
+        <span class="tool" style="pointer-events:none">${ago(a.updated)}</span><span class="act go">${I.right}</span></button>`,
+    )
+    .join('');
+  return `${head(I.list, 'c-accent', 'Oturumlar', `${list.length} oturum${waiting ? ` · ${waiting} seni bekliyor` : ''}`)}
+    <div class="list">${rows || '<div class="empty">Açık oturum yok</div>'}</div>`;
+}
+
 // ---------- Oturum ----------
 async function attachTerm(tab) {
   P.term?.dispose();
@@ -298,7 +315,7 @@ function sessionView() {
 }
 
 // ---------- Çizim ----------
-const VIEWS = { new: newView, menu: menuView, ports: portsView, docker: dockerView, git: gitView, sys: sysView, session: sessionView };
+const VIEWS = { sessions: sessionsView, new: newView, menu: menuView, ports: portsView, docker: dockerView, git: gitView, sys: sysView, session: sessionView };
 
 function render() {
   // Yanıt ya da ad yazılırken oturum kartını baştan çizme.
@@ -309,7 +326,7 @@ function render() {
 }
 
 // Çekmece genişlikleri (bar.js ile aynı).
-const SHEET = { session: 640, menu: 420, ports: 700, docker: 640, git: 580, sys: 440, new: 480 };
+const SHEET = { session: 640, menu: 420, ports: 700, docker: 640, git: 580, sys: 440, new: 480, sessions: 520 };
 
 let lastH = 0;
 function fit() {
@@ -353,9 +370,10 @@ async function load(kind) {
 }
 
 let liveTimer;
-function go(kind, fromMenu = P.fromMenu) {
+// backTo: geri tuşunun döneceği görünüm (menü ya da oturum listesi), yoksa geri tuşu yok.
+function go(kind, backTo = null) {
   P.kind = kind;
-  P.fromMenu = fromMenu && kind !== 'menu';
+  P.backTo = backTo;
   P.armed = null;
   lastH = 0;
   render();
@@ -404,7 +422,16 @@ card.addEventListener('click', async (e) => {
     inp?.select();
     return;
   }
-  if ((el = t('[data-nav]'))) return go(el.dataset.nav, el.dataset.nav !== 'menu');
+  if ((el = t('[data-nav]'))) {
+    const nav = el.dataset.nav;
+    return go(nav, nav === 'menu' || nav === 'sessions' ? null : 'menu');
+  }
+  if ((el = t('[data-sess]'))) {
+    P.id = el.dataset.sess;
+    P.editing = false;
+    await attachTerm(tabOf(agent()));
+    return go('session', 'sessions');
+  }
   if ((el = t('[data-refresh]'))) return load(el.dataset.refresh);
   if ((el = t('[data-toggle="system"]'))) {
     P.showSystem = !P.showSystem;
@@ -512,7 +539,7 @@ T.event.listen('pop-show', async ({ payload }) => {
   P.id = payload.id;
   P.editing = false;
   if (payload.kind === 'session') await attachTerm(tabOf(agent()));
-  go(payload.kind, false);
+  go(payload.kind, null);
   void card.offsetWidth;
   card.classList.add('in');
   setTimeout(() => $('reply')?.focus(), 60);

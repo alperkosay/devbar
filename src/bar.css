@@ -138,13 +138,22 @@ body.float .notch { height: 34px; --slant: 18px; }
 .ind.hot b { color: var(--red); }
 .inds .sep { width: 1px; height: 14px; background: var(--line2); margin: 0 4px; flex: none; }
 
-/* Çekmecesi açık olan öğe, çekmeceyle aynı renkte "yapışık" görünür. */
-.brand.open, .ind.open, .chip.open {
-  background: var(--sheet);
-  border-radius: 7px 7px 0 0;
-  height: 30px;
-  box-shadow: inset 0 2px 0 var(--accent);
+/* Çekmecesi açık olan öğe: yazı vurgu rengine döner, barın alt kenarında ince çizgi. */
+.brand, .ind, .chip, .newbtn { position: relative; }
+.brand.open, .ind.open, .chip.open, .newbtn.open { color: var(--accent); background: transparent; }
+.ind.open svg, .chip.open svg, .ind.open b, .chip.open b, .ind.open span, .newbtn.open svg { color: var(--accent); }
+.brand.open::after, .ind.open::after, .chip.open::after, .newbtn.open::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: -4px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+  animation: grow 0.22s var(--ease);
 }
+@keyframes grow { from { transform: scaleX(0.3); opacity: 0; } }
 .notch.open { background: linear-gradient(180deg, var(--tab-ha) 0%, var(--tab-hb) 100%); }
 /* Sağ taraf: oturumlar, ağ, IP, telefon, yeni oturum. */
 .side-r .sep { width: 1px; height: 14px; background: var(--line2); margin: 0 4px; flex: none; }
@@ -174,12 +183,7 @@ body[data-theme="liquid"] .notch::before {
   border-radius: inherit;
 }
 body[data-theme="liquid"] .notch::after { left: 22px; right: 22px; bottom: 2px; border-radius: 2px; }
-body[data-theme="liquid"] .brand.open, body[data-theme="liquid"] .ind.open, body[data-theme="liquid"] .chip.open {
-  background: rgba(255, 255, 255, 0.16);
-  box-shadow: inset 0 2px 0 #fff;
-}
 body[data-theme="liquid"] .chip.waiting { background: rgba(255, 255, 255, 0.18); }
-body[data-theme="light"] .brand.open, body[data-theme="light"] .ind.open, body[data-theme="light"] .chip.open { background: #ffffff; }
 
 .side-r .chips, .side-r .extras { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .side-r .chips { overflow: hidden; }
@@ -187,3 +191,10 @@ body[data-theme="light"] .brand.open, body[data-theme="light"] .ind.open, body[d
 /* Yüzen modda Liquid kapsül de tepeye yapışık. */
 body.float[data-theme="liquid"] .notch { height: 34px; border-radius: 0 0 18px 18px; border-top: 0; }
 body.float[data-theme="liquid"] .notch { background: linear-gradient(180deg, rgba(70, 70, 76, 0.94), rgba(24, 24, 27, 0.96)); }
+
+/* Taşan oturumlar için liste butonu */
+.chip.more { color: var(--muted); }
+.chip.more svg { width: 13px; height: 13px; }
+.side-r .chips { flex: 1 1 auto; justify-content: flex-end; }
+.side-r { overflow: hidden; }
+.side-r .extras { flex: none; }

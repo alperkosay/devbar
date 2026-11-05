@@ -15,7 +15,7 @@ const S = {
 };
 
 // Çekmece genişlikleri (mantıksal piksel).
-const SHEET = { session: 640, menu: 420, ports: 700, docker: 640, git: 580, sys: 440, new: 480 };
+const SHEET = { session: 640, menu: 420, ports: 700, docker: 640, git: 580, sys: 440, new: 480, sessions: 520 };
 const extrasEl = $('extras');
 
 // Saniyedeki bayt: 1.2M, 340K, 12B
@@ -112,17 +112,17 @@ function render() {
   } else {
     const ic = p.kind === 'running' ? '<span class="spin"></span>' : `<span class="ic ${p.kind}">${p.kind === 'waiting' ? I.bell : I.check}</span>`;
     const more = p.extra > 0 ? `<span class="more">+${p.extra}</span>` : '';
-    notch.innerHTML = `${ic}<span class="txt"><b>${esc(nameOf(p.a))}</b><span>${esc(p.a.activity)}</span></span>${more}`;
+    notch.innerHTML = `${ic}<span class="txt"><b>${esc(nameOf(p.a))}</b><span>${esc(p.a.short || p.a.activity)}</span></span>${more}`;
   }
   notch.dataset.sid = p.a?.sessionId || '';
 
   chipsEl.innerHTML = p.list
-    .slice(0, 8)
     .map(
       (a) =>
         `<button class="chip ${a.status}" data-sid="${esc(a.sessionId)}" data-key="session:${esc(a.sessionId)}" title="${esc(a.cwd)}\n${esc(a.activity)}"><span class="dot ${a.status}"></span><b>${esc(nameOf(a))}</b></button>`,
     )
     .join('');
+  fitChips(p.list.length);
   notch.dataset.key = p.a ? `session:${p.a.sessionId}` : 'menu:';
   markOpen();
 
@@ -134,6 +134,24 @@ function render() {
       lastSize = size;
       invoke('bar_size', { w: Math.ceil(r.width + 24), h: 34 });
     }
+  }
+}
+
+// Çipler sığmazsa sondan atılır (en acil olanlar önde kalır), yerine "+N" liste butonu gelir.
+function fitChips(total) {
+  // Çipler sağa yaslı; taşma sola olduğu için scrollWidth ölçmez, genişlikleri topla.
+  const chips = [...chipsEl.querySelectorAll('.chip')];
+  const avail = chipsEl.clientWidth;
+  const widths = chips.map((c) => c.offsetWidth + 2);
+  let used = widths.reduce((a, b) => a + b, 0);
+  if (used <= avail) return;
+  chipsEl.insertAdjacentHTML('beforeend', `<button class="chip more" data-list data-key="sessions:" title="Bütün oturumlar">${I.list}<b>+0</b></button>`);
+  const moreEl = chipsEl.querySelector('.chip.more');
+  let shown = chips.length;
+  while (shown > 0 && used + moreEl.offsetWidth + 2 > avail) {
+    used -= widths[--shown];
+    chips[shown].remove();
+    moreEl.querySelector('b').textContent = `+${total - shown}`;
   }
 }
 
@@ -170,6 +188,8 @@ notch.addEventListener('click', () => {
 });
 notch.addEventListener('dblclick', () => invoke('open_app', { target: notch.dataset.sid || null }));
 chipsEl.addEventListener('click', (e) => {
+  const list = e.target.closest('[data-list]');
+  if (list) return openSheet('sessions', null, list, 'right');
   const b = e.target.closest('[data-sid]');
   if (b) pop(b, b.dataset.sid, 'right');
 });

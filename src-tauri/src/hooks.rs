@@ -20,6 +20,8 @@ pub struct Agent {
     /// idle | running | waiting | done | ended
     pub status: String,
     pub activity: String,
+    /// Barda gösterilen kısa durum: komutun kendisi değil, ne yaptığı ("Komut çalıştırıyor").
+    pub short: String,
     /// Son gönderilen prompt, kısaltılmış.
     pub prompt: String,
     pub updated: u64,
@@ -145,6 +147,11 @@ fn handle(app: &AppHandle, st: &Shared, v: &Value) {
             }
             _ => {}
         }
+        a.short = if event == "PreToolUse" {
+            short_verb(v["tool_name"].as_str().unwrap_or(""))
+        } else {
+            a.activity.split(" · ").next().unwrap_or("").to_string()
+        };
         a.updated = now();
         let out = a.clone();
         if event == "SessionEnd" {
@@ -201,6 +208,24 @@ fn mark_used(st: &Shared, tab: &str) {
     if changed {
         save_tabs(st);
     }
+}
+
+/// Araç adından barda gösterilecek kısa, komutsuz ifade.
+fn short_verb(name: &str) -> String {
+    match name {
+        "Read" | "NotebookRead" => "Dosya okuyor",
+        "Edit" | "MultiEdit" | "NotebookEdit" => "Dosya düzenliyor",
+        "Write" => "Dosya yazıyor",
+        "Bash" | "PowerShell" | "BashOutput" => "Komut çalıştırıyor",
+        "Grep" | "Glob" => "Kodda arıyor",
+        "WebFetch" => "Web sayfası okuyor",
+        "WebSearch" => "Web'de arıyor",
+        "Task" | "Agent" => "Alt agent çalışıyor",
+        "TodoWrite" => "Plan yapıyor",
+        n if n.starts_with("mcp__") => "Araç kullanıyor",
+        _ => "Çalışıyor",
+    }
+    .to_string()
 }
 
 fn verb(name: &str) -> String {

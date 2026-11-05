@@ -187,3 +187,5 @@ body[data-theme="liquid"] .sheet { border-color: rgba(255, 255, 255, 0.18); box-
 body[data-theme="liquid"] .c-green, body[data-theme="liquid"] .c-sky, body[data-theme="liquid"] .c-pink,
 body[data-theme="liquid"] .c-amber, body[data-theme="liquid"] .c-accent, body[data-theme="liquid"] .c-blue { color: #fff; background: rgba(255, 255, 255, 0.1); }
 body[data-theme="light"] .sheet { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18); }
+
+button.row { width: 100%; font: inherit; color: inherit; }
