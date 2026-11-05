@@ -5,6 +5,7 @@ mod hooks;
 mod pty;
 mod remote;
 mod store;
+mod sysmon;
 mod win;
 
 use serde::Serialize;
@@ -18,8 +19,6 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, RunEven
 /// Status bar modunda üstte ayrılan şerit (mantıksal piksel). Bar penceresi tam bu boyda;
 /// tıklama geçirme gibi hilelere gerek yok. Asıl arayüz ayrı, normal bir pencerede ("app").
 const BAR_H: f64 = 30.0;
-/// Bardaki oturuma tıklayınca altında açılan kartın genişliği (mantıksal piksel).
-const POP_W: f64 = 440.0;
 const SHORTCUT: &str = "ctrl+alt+space";
 
 pub struct AppState {
@@ -31,7 +30,9 @@ pub struct AppState {
     pub pill: Mutex<(f64, f64)>,
     /// Açılır kart: gösterilen oturum ve en son ne zaman kapandığı (aynı çipe tekrar
     /// tıklayınca kapansın, yeniden açılmasın diye).
-    pub pop: Mutex<(String, Option<std::time::Instant>)>,
+    pub pop: Mutex<(String, Option<std::time::Instant>, f64)>,
+    /// Portlar, CPU/RAM, süreçler.
+    pub mon: sysmon::Mon,
     /// Ana monitör, fiziksel piksel: x, y, w, h.
     pub monitor: Mutex<(i32, i32, i32, i32)>,
     pub dir: PathBuf,
@@ -352,28 +353,29 @@ fn notify(app: AppHandle, title: String, body: String) {
     let _ = app.notification().builder().title(title).body(body).show();
 }
 
-/// Bardaki bir oturuma tıklanınca altında kart açar. `x`: tıklanan çipin ortası, bar
-/// penceresine göre mantıksal piksel.
+/// Bardan aşağı sarkan çekmece. `kind`: session | menu | ports | docker | git | sys;
+/// `left`: bar penceresine göre sol kenar, `w`: genişlik (mantıksal piksel).
 #[tauri::command]
-fn show_pop(app: AppHandle, st: State<'_, Shared>, sid: String, x: f64) {
+fn show_pop(app: AppHandle, st: State<'_, Shared>, kind: String, id: Option<String>, left: f64, w: f64) {
+    let key = format!("{kind}:{}", id.clone().unwrap_or_default());
     {
         let mut p = st.pop.lock().unwrap();
-        // Kart açıkken aynı çipe tıklamak önce kartı kapatır (odak kaybı); hemen yeniden açma.
-        if p.0 == sid && p.1.is_some_and(|t| t.elapsed() < Duration::from_millis(400)) {
+        // Çekmece açıkken aynı yere tıklamak önce onu kapatır (odak kaybı); hemen yeniden açma.
+        if p.0 == key && p.1.is_some_and(|t| t.elapsed() < Duration::from_millis(400)) {
             p.1 = None;
             return;
         }
-        *p = (sid.clone(), None);
+        *p = (key.clone(), None, w);
     }
     let (Some(bar), Some(pop)) = (app.get_webview_window("bar"), app.get_webview_window("pop")) else { return };
     let (Ok(bp), Ok(bs), Ok(scale)) = (bar.outer_position(), bar.outer_size(), bar.scale_factor()) else { return };
     let (mx, _, mw, _) = *st.monitor.lock().unwrap();
-    let pw = (POP_W * scale).round() as i32;
-    let margin = (8.0 * scale) as i32;
-    let px = (bp.x + (x * scale) as i32 - pw / 2).clamp(mx + margin, mx + mw - pw - margin);
-    let py = bp.y + bs.height as i32 + (2.0 * scale) as i32;
-    let _ = pop.set_position(PhysicalPosition::new(px, py));
-    let _ = app.emit_to("pop", "pop-show", sid);
+    let pw = (w * scale).round() as i32;
+    let px = (bp.x + (left * scale) as i32).clamp(mx, mx + mw - pw);
+    let _ = pop.set_size(tauri::LogicalSize::new(w, 160.0));
+    let _ = pop.set_position(PhysicalPosition::new(px, bp.y + bs.height as i32));
+    let _ = app.emit_to("pop", "pop-show", serde_json::json!({ "kind": kind, "id": id }));
+    let _ = app.emit_to("bar", "pop-open", key);
     let _ = pop.show();
     let _ = pop.set_focus();
 }
@@ -384,14 +386,66 @@ fn hide_pop(app: AppHandle, st: State<'_, Shared>) {
     if let Some(pop) = app.get_webview_window("pop") {
         let _ = pop.hide();
     }
+    let _ = app.emit_to("bar", "pop-close", ());
 }
 
-/// Kart içeriğinin yüksekliği değişince pencere de o boya gelir.
+/// Çekmece içeriğinin yüksekliği değişince pencere de o boya gelir.
 #[tauri::command]
-fn pop_size(app: AppHandle, h: f64) {
+fn pop_size(app: AppHandle, st: State<'_, Shared>, h: f64, w: Option<f64>) {
+    let w = {
+        let mut p = st.pop.lock().unwrap();
+        if let Some(w) = w {
+            p.2 = w;
+        }
+        p.2
+    };
     if let Some(pop) = app.get_webview_window("pop") {
-        let _ = pop.set_size(tauri::LogicalSize::new(POP_W, h.clamp(80.0, 640.0)));
+        let _ = pop.set_size(tauri::LogicalSize::new(w, h.clamp(80.0, 760.0)));
     }
+}
+
+// ---------- Geliştirici göstergeleri ----------
+
+#[tauri::command]
+async fn sys_ports(st: State<'_, Shared>) -> Result<Vec<sysmon::Port>, String> {
+    Ok(st.mon.ports())
+}
+
+#[tauri::command]
+async fn sys_docker() -> Result<Option<Vec<sysmon::Container>>, String> {
+    Ok(sysmon::docker())
+}
+
+#[tauri::command]
+async fn sys_git(st: State<'_, Shared>) -> Result<Vec<sysmon::Repo>, String> {
+    Ok(sysmon::git(&sysmon::project_dirs(&st)))
+}
+
+#[tauri::command]
+async fn sys_top(st: State<'_, Shared>) -> Result<Vec<(String, u64, usize)>, String> {
+    Ok(st.mon.top())
+}
+
+#[tauri::command]
+async fn sys_kill(pid: u32) -> Result<(), String> {
+    sysmon::kill(pid)
+}
+
+#[tauri::command]
+fn sys_open_url(url: String) -> Result<(), String> {
+    sysmon::open_url(&url)
+}
+
+#[tauri::command]
+fn sys_open_path(kind: String, path: String) -> Result<(), String> {
+    sysmon::open_path(&kind, &path)
+}
+
+/// Menüden "bu klasörde Claude": ana pencere açılır ve yeni sekme başlar.
+#[tauri::command]
+fn new_session(app: AppHandle, cwd: String) {
+    show_app(&app, None);
+    let _ = app.emit_to("app", "new-tab", cwd);
 }
 
 /// Bir sekmenin son ekran çıktısı (ham terminal verisi, sütun ve satır sayısı).
@@ -532,7 +586,8 @@ fn main() {
                 agents: Mutex::new(HashMap::new()),
                 settings: Mutex::new(settings),
                 pill: Mutex::new((160.0, 34.0)),
-                pop: Mutex::new((String::new(), None)),
+                pop: Mutex::new((String::new(), None, 440.0)),
+                mon: sysmon::Mon::default(),
                 monitor: Mutex::new((0, 0, 0, 0)),
                 dir,
                 hub: remote::Hub::default(),
@@ -554,6 +609,7 @@ fn main() {
             if let Err(e) = remote::apply(app.handle(), &st) {
                 eprintln!("Telefon erişimi açılamadı: {e}");
             }
+            sysmon::start(app.handle().clone(), st.clone());
             poller(app.handle().clone(), st);
             if let Err(e) = tray(app) {
                 eprintln!("Tepsi ikonu eklenemedi: {e}");
@@ -593,6 +649,14 @@ fn main() {
             show_pop,
             hide_pop,
             pop_size,
+            sys_ports,
+            sys_docker,
+            sys_git,
+            sys_top,
+            sys_kill,
+            sys_open_url,
+            sys_open_path,
+            new_session,
             tab_screen,
             ready,
             quit

@@ -105,3 +105,39 @@ body.float .notch::before {
     radial-gradient(circle at 100% 100%, transparent 11.5px, var(--notch) 12px) right / 12px 12px no-repeat;
   pointer-events: none;
 }
+
+/* Sol taraf: Ada menüsü ve geliştirici göstergeleri. */
+.brand svg:last-child { width: 12px; height: 12px; opacity: 0.6; margin-left: -2px; }
+.inds { display: flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; }
+.ind {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 7px;
+  color: var(--soft);
+  white-space: nowrap;
+  flex: none;
+  transition: background 0.15s;
+}
+.ind:hover { background: rgba(255, 255, 255, 0.08); }
+.ind svg { width: 13px; height: 13px; }
+.ind b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.ind span { color: var(--dim); font-size: 11px; }
+.ind.ports svg { color: var(--green); }
+.ind.docker svg { color: var(--sky); }
+.ind.git svg { color: var(--pink); }
+.ind.sys svg { color: var(--muted); }
+.ind.warm b { color: var(--amber); }
+.ind.hot b { color: var(--red); }
+.inds .sep { width: 1px; height: 14px; background: var(--line2); margin: 0 4px; flex: none; }
+
+/* Çekmecesi açık olan öğe, çekmeceyle aynı renkte "yapışık" görünür. */
+.brand.open, .ind.open, .chip.open {
+  background: #1d1d24;
+  border-radius: 7px 7px 0 0;
+  height: 30px;
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+.notch.open { box-shadow: inset 0 -2px 0 var(--accent); }

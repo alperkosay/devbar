@@ -537,6 +537,8 @@ viewEl.addEventListener('click', async (e) => {
 
 // ---------- Olaylar ----------
 T.event.listen('select', ({ payload }) => goTarget(payload));
+// Bardaki menüden "bu klasörde Claude".
+T.event.listen('new-tab', ({ payload: cwd }) => newTab(cwd));
 T.event.listen('open-settings', () => $('btn-settings').click());
 T.event.listen('settings', ({ payload }) => {
   S.settings = payload;

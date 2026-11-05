@@ -1,12 +1,49 @@
-// Üstteki durum barı: en acil oturum ortada, tüm oturumlar sağda. Tıklayınca ana pencere açılır.
-// Hatırlatıcılar ve "uzun iş bitti" bildirimleri de buradan gider (bar hep açık).
+// Üstteki durum barı. Solda Ada menüsü ve geliştirici göstergeleri (portlar, Docker, git,
+// CPU/RAM), ortada en acil oturum, sağda tüm oturumlar. Her öğeye tıklayınca bardan aşağı
+// bir çekmece açılır. Hatırlatıcılar ve "uzun iş bitti" bildirimleri de buradan gider.
 const notch = $('notch');
 const chipsEl = $('chips');
+const indsEl = $('inds');
 
 const S = {
   settings: { bar: true, reminders: [] },
   agents: new Map(),
+  sys: null, // arka uçtan gelen özet: cpu, mem, port, docker, git
+  openKey: '', // açık çekmecenin anahtarı (barda vurgulanır)
 };
+
+// Çekmece genişlikleri (mantıksal piksel).
+const SHEET = { session: 640, menu: 420, ports: 700, docker: 640, git: 580, sys: 440 };
+const EDGE = 12; // çekmece penceresinin gölge payı
+
+function openSheet(kind, id, el, align = 'left') {
+  const r = el.getBoundingClientRect();
+  const w = SHEET[kind];
+  const left = align === 'right' ? r.right - w + EDGE : align === 'center' ? r.left + r.width / 2 - w / 2 : r.left - EDGE;
+  invoke('show_pop', { kind, id: id ?? null, left, w });
+}
+
+function markOpen() {
+  document.querySelectorAll('[data-key]').forEach((el) => el.classList.toggle('open', el.dataset.key === S.openKey));
+}
+
+function renderInds() {
+  const s = S.sys;
+  if (!s) return (indsEl.innerHTML = '');
+  const mem = s.memTotal ? Math.round((s.memUsed / s.memTotal) * 100) : 0;
+  const cpu = Math.round(s.cpu);
+  const lvl = (v) => (v >= 90 ? 'hot' : v >= 75 ? 'warm' : '');
+  const gb = (b) => (b / 1024 ** 3).toFixed(1);
+  let html = `<button class="ind ports" data-kind="ports" data-key="ports:" title="Açık portlar">${I.plug}<b>${s.ports}</b><span>port</span></button>`;
+  if (s.docker !== null && s.docker !== undefined)
+    html += `<button class="ind docker" data-kind="docker" data-key="docker:" title="Docker">${I.box}<b>${s.docker}</b><span>container</span></button>`;
+  if (s.git > 0) html += `<button class="ind git" data-kind="git" data-key="git:" title="Değişikliği olan repolar">${I.branch}<b>${s.git}</b><span>repo</span></button>`;
+  html += `<span class="sep"></span>
+    <button class="ind sys ${lvl(cpu)}" data-kind="sys" data-key="sys:" title="İşlemci">${I.cpu}<b>${cpu}%</b></button>
+    <button class="ind sys ${lvl(mem)}" data-kind="sys" data-key="sys:" title="Bellek: ${gb(s.memUsed)} / ${gb(s.memTotal)} GB">${I.mem}<b>${mem}%</b></button>`;
+  indsEl.innerHTML = html;
+  markOpen();
+}
 
 function peekState() {
   const list = sortedAgents(S.agents);
@@ -39,9 +76,11 @@ function render() {
     .slice(0, 8)
     .map(
       (a) =>
-        `<button class="chip ${a.status}" data-sid="${esc(a.sessionId)}" title="${esc(a.cwd)}\n${esc(a.activity)}"><span class="dot ${a.status}"></span><b>${esc(a.project)}</b></button>`,
+        `<button class="chip ${a.status}" data-sid="${esc(a.sessionId)}" data-key="session:${esc(a.sessionId)}" title="${esc(a.cwd)}\n${esc(a.activity)}"><span class="dot ${a.status}"></span><b>${esc(a.project)}</b></button>`,
     )
     .join('');
+  notch.dataset.key = p.a ? `session:${p.a.sessionId}` : 'menu:';
+  markOpen();
 
   // Yüzen ada modunda pencere hap boyunda olsun.
   if (!S.settings.bar) {
@@ -70,21 +109,25 @@ function setLayout(bar) {
 }
 
 // ---------- Tıklamalar ----------
-$('brand').innerHTML = `${I.spark}<span>Ada</span>`;
-$('brand').addEventListener('click', () => invoke('open_app', { target: null }));
+$('brand').innerHTML = `${I.spark}<span>Ada</span>${I.down}`;
+$('brand').addEventListener('click', (e) => openSheet('menu', null, e.currentTarget));
+$('brand').addEventListener('dblclick', () => invoke('open_app', { target: null }));
+indsEl.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-kind]');
+  if (b) openSheet(b.dataset.kind, null, b);
+});
 // Oturuma tıklayınca altında kart açılır; çift tıklayınca direkt ana pencere.
-function pop(el, sid) {
-  const r = el.getBoundingClientRect();
-  invoke('show_pop', { sid, x: r.left + r.width / 2 });
+function pop(el, sid, align) {
+  openSheet('session', sid, el, align);
 }
 notch.addEventListener('click', () => {
-  if (notch.dataset.sid) pop(notch, notch.dataset.sid);
-  else invoke('open_app', { target: null });
+  if (notch.dataset.sid) pop(notch, notch.dataset.sid, 'center');
+  else openSheet('menu', null, notch, 'center');
 });
 notch.addEventListener('dblclick', () => invoke('open_app', { target: notch.dataset.sid || null }));
 chipsEl.addEventListener('click', (e) => {
   const b = e.target.closest('[data-sid]');
-  if (b) pop(b, b.dataset.sid);
+  if (b) pop(b, b.dataset.sid, 'right');
 });
 chipsEl.addEventListener('dblclick', (e) => {
   const b = e.target.closest('[data-sid]');
@@ -153,6 +196,18 @@ T.event.listen('settings', ({ payload }) => {
   checkReminders();
 });
 T.event.listen('layout', ({ payload: bar }) => setLayout(bar));
+T.event.listen('sys', ({ payload }) => {
+  S.sys = payload;
+  renderInds();
+});
+T.event.listen('pop-open', ({ payload }) => {
+  S.openKey = payload;
+  markOpen();
+});
+T.event.listen('pop-close', () => {
+  S.openKey = '';
+  markOpen();
+});
 setInterval(render, 30000); // 3 saat kuralı ve süreler için
 
 (async () => {
