@@ -102,6 +102,9 @@ function menuView() {
       <button class="chipb" data-tool="iso">${I.clock}ISO tarih</button>
       <button class="chipb" data-tool="localhost">${I.ext}localhost:3000</button>
     </div>
+    <div class="sec">Bar teması</div>
+    <div class="themes">${THEMES.map(([k, l]) => `<button class="sw ${k} ${P.settings.theme === k || (!P.settings.theme && k === 'gece') ? 'on' : ''}" data-theme="${k}" title="${l}"></button>`).join('')}
+      <span class="tool" style="pointer-events:none">${esc((THEMES.find(([k]) => k === (P.settings.theme || 'gece')) || [, ''])[1])}</span></div>
     ${toastHtml()}
     <div class="foot">
       <button class="tool" data-app="open">${I.grid}DevBar penceresi</button>
@@ -212,6 +215,31 @@ function sysView() {
     <div class="procs">${procs || '<div class="empty">Bakılıyor…</div>'}</div>`;
 }
 
+// Yeni oturum: son klasörler ve bulunan bütün repolar; tıklayınca orada Claude açılır.
+function newView() {
+  const seen = new Set();
+  const items = [];
+  const add = (path, name, extra) => {
+    const k = path.toLowerCase();
+    if (seen.has(k)) return;
+    seen.add(k);
+    items.push({ path, name, extra });
+  };
+  projects().forEach((d) => add(d, folderName(d), 'Son'));
+  (P.git || []).forEach((r) => add(r.path, r.name, r.branch));
+  const rows = items
+    .map(
+      (x) => `<button class="row" data-open="claude" data-path="${esc(x.path)}" style="text-align:left">
+        <span class="ic c-accent" style="width:30px;height:30px;border-radius:9px;display:grid;place-items:center">${I.spark}</span>
+        <div class="main"><div class="l1"><b>${esc(x.name)}</b>${x.extra ? `<span class="badge">${esc(x.extra)}</span>` : ''}</div><div class="l3">${esc(x.path)}</div></div>
+        <span class="act go">${I.right}</span></button>`,
+    )
+    .join('');
+  return `${head(I.plus, 'c-accent', 'Yeni Claude oturumu', 'Klasör seç, DevBar penceresinde açılır')}
+    <div class="list">${rows || '<div class="empty">Bakılıyor…</div>'}</div>
+    <div class="foot"><button class="tool" data-app="pick">${I.folder}Başka klasör…</button></div>`;
+}
+
 // ---------- Oturum ----------
 async function attachTerm(tab) {
   P.term?.dispose();
@@ -270,7 +298,7 @@ function sessionView() {
 }
 
 // ---------- Çizim ----------
-const VIEWS = { menu: menuView, ports: portsView, docker: dockerView, git: gitView, sys: sysView, session: sessionView };
+const VIEWS = { new: newView, menu: menuView, ports: portsView, docker: dockerView, git: gitView, sys: sysView, session: sessionView };
 
 function render() {
   // Yanıt ya da ad yazılırken oturum kartını baştan çizme.
@@ -281,7 +309,7 @@ function render() {
 }
 
 // Çekmece genişlikleri (bar.js ile aynı).
-const SHEET = { session: 640, menu: 420, ports: 700, docker: 640, git: 580, sys: 440 };
+const SHEET = { session: 640, menu: 420, ports: 700, docker: 640, git: 580, sys: 440, new: 480 };
 
 let lastH = 0;
 function fit() {
@@ -316,7 +344,7 @@ async function load(kind) {
       P.ports = await invoke('sys_ports');
     }
     else if (kind === 'docker') P.docker = await invoke('sys_docker');
-    else if (kind === 'git') P.git = await invoke('sys_git');
+    else if (kind === 'git' || kind === 'new') P.git = await invoke('sys_git');
     else if (kind === 'sys') P.top = await invoke('sys_top');
   } catch (e) {
     say(e, true);
@@ -418,8 +446,19 @@ card.addEventListener('click', async (e) => {
       return hide();
     }
   }
+  if ((el = t('[data-theme]'))) {
+    P.settings.theme = el.dataset.theme;
+    applyTheme(P.settings.theme);
+    invoke('set_theme', { theme: P.settings.theme });
+    return render();
+  }
   if ((el = t('[data-app]'))) {
     const k = el.dataset.app;
+    if (k === 'pick') {
+      await invoke('open_app', { target: null });
+      T.event.emitTo('app', 'show-new');
+      return hide();
+    }
     if (k === 'open') invoke('open_app', { target: null });
     else if (k === 'open-session') invoke('open_app', { target: P.id });
     else if (k === 'settings') {
@@ -469,6 +508,7 @@ T.event.listen('pop-show', async ({ payload }) => {
   P.agents = new Map(st.agents.map((a) => [a.sessionId, a]));
   P.tabs = st.tabs;
   P.settings = st.settings;
+  applyTheme(st.settings.theme);
   P.id = payload.id;
   P.editing = false;
   if (payload.kind === 'session') await attachTerm(tabOf(agent()));

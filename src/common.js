@@ -38,5 +38,16 @@ async function getState() {
   }
 }
 
+// Bar ve çekmece teması (gece | liquid | light | ocean).
+const THEMES = [
+  ['gece', 'Gece'],
+  ['liquid', 'Liquid'],
+  ['light', 'Açık'],
+  ['ocean', 'Okyanus'],
+];
+function applyTheme(t) {
+  document.body.dataset.theme = THEMES.some(([k]) => k === t) ? t : 'gece';
+}
+
 // Ayarlardaki hatırlatıcı ikonları.
 const RICON = { water: I.water, stand: I.stand, eye: I.eye, bell: I.bell };

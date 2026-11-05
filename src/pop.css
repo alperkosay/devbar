@@ -2,7 +2,6 @@
 html, body { background: transparent; }
 body { padding: 0 12px 20px; }
 
-:root { --sheet: #1d1d24; --row: #23232b; --row2: #2a2a33; }
 
 .sheet {
   display: flex;
@@ -132,8 +131,8 @@ body { padding: 0 12px 20px; }
 .sub { font-size: 11.5px; color: var(--dim); margin-top: -6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .actline { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--soft); }
 .actline svg { width: 14px; height: 14px; color: var(--muted); }
-.actline.running { color: #93c5fd; }
-.actline.waiting { color: #fde68a; }
+.actline.running { color: var(--running-text); }
+.actline.waiting { color: var(--waiting-text); }
 .actline.waiting svg { color: var(--amber); }
 .prompt { font-size: 12px; color: var(--muted); line-height: 1.45; padding-left: 10px; border-left: 2px solid var(--line2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .screen {
@@ -145,7 +144,7 @@ body { padding: 0 12px 20px; }
   font-family: "Cascadia Mono", Consolas, monospace;
   font-size: 11px;
   line-height: 1.45;
-  color: #c9c9d1;
+  color: var(--screen-fg);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   overflow: hidden;
@@ -156,7 +155,7 @@ body { padding: 0 12px 20px; }
 .quick button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; height: 34px; border-radius: 10px; font-size: 12px; font-weight: 600; transition: filter 0.15s, transform 0.15s; }
 .quick button:active { transform: scale(0.97); }
 .quick button svg { width: 14px; height: 14px; }
-.quick .yes { background: var(--green); color: #052e12; }
+.quick .yes { background: var(--green); color: var(--on-accent); }
 .quick .always { background: rgba(74, 222, 128, 0.14); color: var(--green); }
 .quick .no { background: rgba(248, 113, 113, 0.14); color: var(--red); }
 .quick button:hover { filter: brightness(1.1); }
@@ -165,10 +164,26 @@ body { padding: 0 12px 20px; }
 .reply:focus-within { border-color: rgba(232, 131, 94, 0.45); }
 .reply input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--text); font: inherit; font-size: 12.5px; padding: 6px 0; user-select: text; }
 .reply input::placeholder { color: var(--dim); }
-.reply button { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--accent); color: #1a0d07; }
+.reply button { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--accent); color: var(--on-accent); }
 .reply button svg { width: 14px; height: 14px; }
 .ft { display: flex; align-items: center; gap: 8px; }
 .ft .note { font-size: 11.5px; color: var(--dim); flex: 1; }
 .open { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--soft); padding: 7px 12px; border-radius: 10px; background: var(--row); }
 .open:hover { background: var(--row2); color: var(--text); }
 .open svg { width: 13px; height: 13px; }
+
+/* Tema seçici (menü altında) */
+.themes { display: flex; gap: 6px; align-items: center; }
+.sw { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; box-shadow: 0 0 0 1px var(--line2); transition: transform 0.15s; }
+.sw:hover { transform: scale(1.12); }
+.sw.on { border-color: var(--accent); }
+.sw.gece { background: linear-gradient(135deg, #26262f, #0b0b0e); }
+.sw.liquid { background: linear-gradient(135deg, #ffffff 0%, #9a9aa6 45%, #18181b 100%); }
+.sw.light { background: linear-gradient(135deg, #ffffff, #e4e4ea); }
+.sw.ocean { background: linear-gradient(135deg, #38bdf8, #0a1628 70%); }
+
+/* Liquid çekmece: cam kenar ve parlak üst çizgi. */
+body[data-theme="liquid"] .sheet { border-color: rgba(255, 255, 255, 0.18); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 18px 40px rgba(0, 0, 0, 0.55); }
+body[data-theme="liquid"] .c-green, body[data-theme="liquid"] .c-sky, body[data-theme="liquid"] .c-pink,
+body[data-theme="liquid"] .c-amber, body[data-theme="liquid"] .c-accent, body[data-theme="liquid"] .c-blue { color: #fff; background: rgba(255, 255, 255, 0.1); }
+body[data-theme="light"] .sheet { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18); }

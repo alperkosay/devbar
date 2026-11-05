@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::process::Command;
 use std::sync::Mutex;
 use std::time::Duration;
-use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+use sysinfo::{Networks, Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 use tauri::{AppHandle, Emitter};
 
 #[cfg(windows)]
@@ -15,11 +15,12 @@ use std::os::windows::process::CommandExt;
 
 pub struct Mon {
     sys: Mutex<System>,
+    nets: Mutex<Networks>,
 }
 
 impl Default for Mon {
     fn default() -> Self {
-        Mon { sys: Mutex::new(System::new()) }
+        Mon { sys: Mutex::new(System::new()), nets: Mutex::new(Networks::new_with_refreshed_list()) }
     }
 }
 
@@ -190,6 +191,19 @@ impl Mon {
         out
     }
 
+    /// Son çağrıdan bu yana alınan ve gönderilen bayt (sanal ve geri döngü arayüzleri hariç).
+    pub fn net(&self) -> (u64, u64) {
+        let mut nets = self.nets.lock().unwrap();
+        nets.refresh(true);
+        nets.list()
+            .iter()
+            .filter(|(name, _)| {
+                let n = name.to_lowercase();
+                !(n.contains("loopback") || n.contains("vethernet") || n.contains("virtual") || n.contains("wsl"))
+            })
+            .fold((0, 0), |(r, t), (_, d)| (r + d.received(), t + d.transmitted()))
+    }
+
     /// CPU (%), bellek (bayt).
     pub fn usage(&self) -> (f32, u64, u64) {
         let mut sys = self.sys.lock().unwrap();
@@ -322,6 +336,13 @@ pub struct Summary {
     pub docker: Option<usize>,
     /// Değişikliği olan repo sayısı (son projeler arasında).
     pub git: usize,
+    /// Saniyedeki indirme ve yükleme (bayt).
+    pub net_rx: u64,
+    pub net_tx: u64,
+    /// Bilgisayarın yerel ağ adresi.
+    pub ip: Option<String>,
+    /// Telefon erişimi açık mı.
+    pub phone: bool,
 }
 
 /// Bar göstergeleri için arka planda periyodik özet yayınlar.
@@ -329,7 +350,18 @@ pub fn start(app: AppHandle, st: Shared) {
     std::thread::spawn(move || {
         let mut sum = Summary::default();
         let mut tick: u64 = 0;
+        let mut last = std::time::Instant::now();
+        st.mon.net();
         loop {
+            let (rx, tx) = st.mon.net();
+            let secs = last.elapsed().as_secs_f64().max(0.5);
+            last = std::time::Instant::now();
+            sum.net_rx = (rx as f64 / secs) as u64;
+            sum.net_tx = (tx as f64 / secs) as u64;
+            sum.phone = st.settings.lock().unwrap().remote;
+            if tick % 10 == 0 {
+                sum.ip = crate::remote::lan_ip();
+            }
             let (cpu, used, total) = st.mon.usage();
             sum.cpu = cpu;
             sum.mem_used = used;

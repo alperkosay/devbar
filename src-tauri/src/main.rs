@@ -37,6 +37,8 @@ pub struct AppState {
     pub names: Mutex<HashMap<String, String>>,
     /// Ana monitör, fiziksel piksel: x, y, w, h.
     pub monitor: Mutex<(i32, i32, i32, i32)>,
+    /// Her monitördeki bar: (pencere etiketi, monitör x/y/genişlik/yükseklik fiziksel, ölçek).
+    pub bars: Mutex<Vec<(String, (i32, i32, i32, i32), f64)>>,
     pub dir: PathBuf,
     /// Telefonlara giden olaylar ve sekmelerin ekran tamponu.
     pub hub: remote::Hub,
@@ -271,6 +273,7 @@ fn save_settings(app: AppHandle, st: State<'_, Shared>, mut settings: Settings) 
     if bar_changed {
         place(&app, &st);
     }
+    apply_theme(&app, &st);
 }
 
 #[tauri::command]
@@ -341,6 +344,35 @@ async fn pick_folder(app: AppHandle, start: Option<String>) -> Option<String> {
     d.blocking_pick_folder().and_then(|p| p.into_path().ok()).map(|p| p.to_string_lossy().into_owned())
 }
 
+/// Bar temasını değiştirir (menüdeki renk örneklerinden).
+#[tauri::command]
+fn set_theme(app: AppHandle, st: State<'_, Shared>, theme: String) {
+    let settings = {
+        let mut s = st.settings.lock().unwrap();
+        s.theme = theme;
+        s.clone()
+    };
+    save_settings_file(&st);
+    let _ = app.emit("settings", settings);
+    apply_theme(&app, &st);
+}
+
+/// Liquid temada status bar'ın arkasına Windows akrilik bulanıklığı; diğerlerinde kapalı.
+fn apply_theme(app: &AppHandle, st: &Shared) {
+    use tauri::window::{Color, Effect, EffectsBuilder};
+    let (theme, bar) = {
+        let s = st.settings.lock().unwrap();
+        (s.theme.clone(), s.bar)
+    };
+    for w in bar_windows(app) {
+        if theme == "liquid" && bar {
+            let _ = w.set_effects(EffectsBuilder::new().effect(Effect::Acrylic).color(Color(14, 14, 16, 110)).build());
+        } else {
+            let _ = w.set_effects(None::<tauri::utils::config::WindowEffectsConfig>);
+        }
+    }
+}
+
 /// Ana pencereyi gösterir ve öne getirir. `target`: seçilecek oturum (session id ya da sekme id).
 pub fn show_app(app: &AppHandle, target: Option<String>) {
     let Some(w) = app.get_webview_window("app") else { return };
@@ -399,7 +431,7 @@ fn notify(app: AppHandle, title: String, body: String) {
 /// Bardan aşağı sarkan çekmece. `kind`: session | menu | ports | docker | git | sys;
 /// `left`: bar penceresine göre sol kenar, `w`: genişlik (mantıksal piksel).
 #[tauri::command]
-fn show_pop(app: AppHandle, st: State<'_, Shared>, kind: String, id: Option<String>, left: f64, w: f64) {
+fn show_pop(app: AppHandle, st: State<'_, Shared>, window: tauri::WebviewWindow, kind: String, id: Option<String>, left: f64, w: f64) {
     let key = format!("{kind}:{}", id.clone().unwrap_or_default());
     {
         let mut p = st.pop.lock().unwrap();
@@ -410,15 +442,24 @@ fn show_pop(app: AppHandle, st: State<'_, Shared>, kind: String, id: Option<Stri
         }
         *p = (key.clone(), None, w);
     }
-    let (Some(bar), Some(pop)) = (app.get_webview_window("bar"), app.get_webview_window("pop")) else { return };
+    let bar = window;
+    let Some(pop) = app.get_webview_window("pop") else { return };
     let (Ok(bp), Ok(bs), Ok(scale)) = (bar.outer_position(), bar.outer_size(), bar.scale_factor()) else { return };
-    let (mx, _, mw, _) = *st.monitor.lock().unwrap();
+    let (mx, mw) = st
+        .bars
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|(l, _, _)| l == bar.label())
+        .map(|(_, r, _)| (r.0, r.2))
+        .unwrap_or((bp.x, bs.width as i32));
     let pw = (w * scale).round() as i32;
     let px = (bp.x + (left * scale) as i32).clamp(mx, mx + mw - pw);
-    let _ = pop.set_size(tauri::LogicalSize::new(w, 160.0));
+    // Önce o ekrana taşı, sonra boyutla (ekranlar farklı ölçekte olabilir).
     let _ = pop.set_position(PhysicalPosition::new(px, bp.y + bs.height as i32));
+    let _ = pop.set_size(PhysicalSize::new(pw as u32, (160.0 * scale) as u32));
     let _ = app.emit_to("pop", "pop-show", serde_json::json!({ "kind": kind, "id": id }));
-    let _ = app.emit_to("bar", "pop-open", key);
+    let _ = app.emit_to(bar.label(), "pop-open", key);
     let _ = pop.show();
     let _ = pop.set_focus();
 }
@@ -429,7 +470,7 @@ fn hide_pop(app: AppHandle, st: State<'_, Shared>) {
     if let Some(pop) = app.get_webview_window("pop") {
         let _ = pop.hide();
     }
-    let _ = app.emit_to("bar", "pop-close", ());
+    let _ = app.emit("pop-close", ());
 }
 
 /// Çekmece içeriğinin yüksekliği değişince pencere de o boya gelir.
@@ -498,11 +539,9 @@ fn tab_screen(st: State<'_, Shared>, id: String) -> Option<serde_json::Value> {
 }
 
 #[tauri::command]
-fn ready(app: AppHandle, st: State<'_, Shared>) {
+fn ready(app: AppHandle, st: State<'_, Shared>, window: tauri::WebviewWindow) {
     place(&app, &st);
-    if let Some(w) = app.get_webview_window("bar") {
-        win::set_visible(&w, true);
-    }
+    win::set_visible(&window, true);
 }
 
 #[tauri::command]
@@ -513,50 +552,106 @@ fn quit(app: AppHandle, st: State<'_, Shared>) {
 
 fn shutdown(app: &AppHandle, st: &Shared) {
     pty::kill_all(st);
-    if let Some(w) = app.get_webview_window("bar") {
+    let _ = st;
+    for w in bar_windows(app) {
         win::appbar_remove(&w);
     }
 }
 
-/// Bar penceresini yerleştirir: status bar ise ana ekranın üstünde tam genişlik şerit
-/// (AppBar ile yer ayrılır), yüzen ada ise üst ortada hap boyunda küçük pencere.
-fn place(app: &AppHandle, st: &Shared) {
-    let Some(w) = app.get_webview_window("bar") else { return };
-    let mon = w.primary_monitor().ok().flatten().or_else(|| w.current_monitor().ok().flatten());
-    let Some(mon) = mon else { return };
-    let scale = mon.scale_factor();
-    let (mx, my) = (mon.position().x, mon.position().y);
-    let (mw, mh) = (mon.size().width as i32, mon.size().height as i32);
-    *st.monitor.lock().unwrap() = (mx, my, mw, mh);
-
-    let bar = st.settings.lock().unwrap().bar;
-    let (x, width, height) = if bar {
-        let h = (BAR_H * scale).round() as i32;
-        win::appbar_set(&w, mx, my, mw, h);
-        (mx, mw, h)
-    } else {
-        win::appbar_remove(&w);
-        let (pw, ph) = *st.pill.lock().unwrap();
-        let fw = (pw * scale).round() as i32;
-        (mx + (mw - fw) / 2, fw, (ph * scale).round() as i32)
-    };
-    let _ = w.set_size(PhysicalSize::new(width as u32, height as u32));
-    let _ = w.set_position(PhysicalPosition::new(x, my));
-    let _ = app.emit("layout", bar);
+/// Bütün bar pencereleri ("bar" ana ekran, "bar-1", "bar-2"… diğerleri).
+fn bar_windows(app: &AppHandle) -> Vec<tauri::WebviewWindow> {
+    app.webview_windows().into_iter().filter(|(l, _)| l == "bar" || l.starts_with("bar-")).map(|(_, w)| w).collect()
 }
 
-/// Status bar modunda öndeki uygulama tam ekrana geçince (video, oyun) barı gizler.
+/// Her monitör için bir bar: ana ekran yapılandırmadaki "bar", diğerleri burada açılır. Hepsi
+/// aynı sayfayı yükler ve aynı olayları dinler, yani her ekranda aynı anda güncellenir.
+/// Ekran takılıp çıkarılırsa DevBar yeniden başlatılınca yeni düzene geçer.
+fn create_bars(app: &AppHandle, st: &Shared) {
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
+    let Some(main) = app.get_webview_window("bar") else { return };
+    let primary = main.primary_monitor().ok().flatten();
+    let mut list = Vec::new();
+    let mut n = 0;
+    for m in main.available_monitors().unwrap_or_default() {
+        let rect = (m.position().x, m.position().y, m.size().width as i32, m.size().height as i32);
+        let is_primary = primary.as_ref().is_some_and(|p| p.position() == m.position());
+        let label = if is_primary {
+            "bar".to_string()
+        } else {
+            n += 1;
+            format!("bar-{n}")
+        };
+        if !is_primary && app.get_webview_window(&label).is_none() {
+            let built = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("index.html".into()))
+                .title("DevBar bar")
+                .decorations(false)
+                .transparent(true)
+                .shadow(false)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .resizable(false)
+                .visible(false)
+                .focused(false)
+                .position(rect.0 as f64 / m.scale_factor(), rect.1 as f64 / m.scale_factor())
+                .inner_size(300.0, 30.0)
+                .build();
+            if let Err(e) = built {
+                eprintln!("Bar penceresi açılamadı ({label}): {e}");
+                continue;
+            }
+        }
+        if is_primary {
+            *st.monitor.lock().unwrap() = rect;
+        }
+        list.push((label, rect, m.scale_factor()));
+    }
+    if list.is_empty() {
+        // Monitör bilgisi alınamadıysa en azından ana bar çalışsın.
+        if let Ok(Some(m)) = main.primary_monitor() {
+            let rect = (m.position().x, m.position().y, m.size().width as i32, m.size().height as i32);
+            list.push(("bar".into(), rect, m.scale_factor()));
+        }
+    }
+    *st.bars.lock().unwrap() = list;
+}
+
+/// Bar pencerelerini yerleştirir: status bar ise her ekranın üstünde tam genişlik şerit
+/// (AppBar ile yer ayrılır), yüzen ada ise her ekranın üst ortasında sekme boyunda pencere.
+fn place(app: &AppHandle, st: &Shared) {
+    let bar = st.settings.lock().unwrap().bar;
+    let (pw, ph) = *st.pill.lock().unwrap();
+    for (label, (mx, my, mw, _), scale) in st.bars.lock().unwrap().clone() {
+        let Some(w) = app.get_webview_window(&label) else { continue };
+        let (x, width, height) = if bar {
+            let h = (BAR_H * scale).round() as i32;
+            win::appbar_set(&w, mx, my, mw, h);
+            (mx, mw, h)
+        } else {
+            win::appbar_remove(&w);
+            let fw = (pw * scale).round() as i32;
+            (mx + (mw - fw) / 2, fw, (ph * scale).round() as i32)
+        };
+        let _ = w.set_position(PhysicalPosition::new(x, my));
+        let _ = w.set_size(PhysicalSize::new(width as u32, height as u32));
+    }
+    let _ = app.emit("layout", bar);
+    apply_theme(app, st);
+}
+
+/// Status bar modunda bir ekrandaki uygulama tam ekrana geçince (video, oyun) o ekranın barını gizler.
 fn poller(app: AppHandle, st: Shared) {
     std::thread::spawn(move || {
-        let mut last_fs = false;
+        let mut hidden: HashMap<String, bool> = HashMap::new();
         loop {
             std::thread::sleep(Duration::from_millis(500));
-            let Some(w) = app.get_webview_window("bar") else { continue };
             let bar = st.settings.lock().unwrap().bar;
-            let fs = bar && win::fullscreen_app(&w, *st.monitor.lock().unwrap());
-            if fs != last_fs {
-                win::set_visible(&w, !fs);
-                last_fs = fs;
+            for (label, rect, _) in st.bars.lock().unwrap().clone() {
+                let Some(w) = app.get_webview_window(&label) else { continue };
+                let fs = bar && win::fullscreen_app(&w, rect);
+                if hidden.get(&label).copied().unwrap_or(false) != fs {
+                    win::set_visible(&w, !fs);
+                    hidden.insert(label, fs);
+                }
             }
         }
     });
@@ -634,11 +729,13 @@ fn main() {
                 mon: sysmon::Mon::default(),
                 names: Mutex::new(names),
                 monitor: Mutex::new((0, 0, 0, 0)),
+                bars: Mutex::new(Vec::new()),
                 dir,
                 hub: remote::Hub::default(),
                 term_size: Mutex::new((110, 32)),
             });
             app.manage(st.clone());
+            create_bars(app.handle(), &st);
 
             if let Err(e) = app.global_shortcut().register(SHORTCUT) {
                 eprintln!("Kısayol kaydedilemedi ({SHORTCUT}): {e}");
@@ -695,6 +792,7 @@ fn main() {
             hide_pop,
             pop_size,
             rename,
+            set_theme,
             sys_ports,
             sys_docker,
             sys_git,

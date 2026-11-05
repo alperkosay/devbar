@@ -2,6 +2,8 @@
 // CPU/RAM), ortada en acil oturum, sağda tüm oturumlar. Her öğeye tıklayınca bardan aşağı
 // bir çekmece açılır. Hatırlatıcılar ve "uzun iş bitti" bildirimleri de buradan gider.
 const notch = $('notch');
+// Her ekranda bir bar var; bildirimleri yalnızca ana ekrandaki gönderir (çift gelmesin).
+const PRIMARY = T.window.getCurrentWindow().label === 'bar';
 const chipsEl = $('chips');
 const indsEl = $('inds');
 
@@ -13,7 +15,48 @@ const S = {
 };
 
 // Çekmece genişlikleri (mantıksal piksel).
-const SHEET = { session: 640, menu: 420, ports: 700, docker: 640, git: 580, sys: 440 };
+const SHEET = { session: 640, menu: 420, ports: 700, docker: 640, git: 580, sys: 440, new: 480 };
+const extrasEl = $('extras');
+
+// Saniyedeki bayt: 1.2M, 340K, 12B
+const rate = (b) => (b >= 1e6 ? (b / 1e6).toFixed(1) + 'M' : b >= 1e3 ? Math.round(b / 1e3) + 'K' : b + 'B');
+
+// Sağ uç: ağ hızı, yerel IP (tıkla kopyala), telefon erişimi, yeni oturum.
+let ipCopied = false;
+function renderExtras() {
+  const s = S.sys;
+  let html = '<span class="sep"></span>';
+  if (s) {
+    html += `<button class="ind net" data-kind="sys" data-key="sys:" title="Ağ: indirme / yükleme (saniyede)"><i>↓</i><b class="dn">${rate(s.netRx)}</b><i>↑</i><b class="up">${rate(s.netTx)}</b></button>`;
+    if (s.ip)
+      html += `<button class="ind ip ${ipCopied ? 'copied' : ''}" data-ip="${esc(s.ip)}" title="Yerel IP, tıkla kopyala (telefonda denemek için)">${I.globe}<b>${ipCopied ? 'Kopyalandı' : esc(s.ip)}</b></button>`;
+    if (s.phone) html += `<button class="ind phone" data-phone title="Telefon erişimi açık">${I.phone}</button>`;
+  }
+  html += `<button class="newbtn" data-new data-key="new:" title="Yeni Claude oturumu">${I.plus}Oturum</button>`;
+  extrasEl.innerHTML = html;
+  markOpen();
+}
+extrasEl.addEventListener('click', async (e) => {
+  let b;
+  if ((b = e.target.closest('[data-kind]'))) return openSheet(b.dataset.kind, null, b, 'right');
+  if ((b = e.target.closest('[data-new]'))) return openSheet('new', null, b, 'right');
+  if ((b = e.target.closest('[data-ip]'))) {
+    try {
+      await navigator.clipboard.writeText(b.dataset.ip);
+      ipCopied = true;
+      renderExtras();
+      setTimeout(() => {
+        ipCopied = false;
+        renderExtras();
+      }, 1400);
+    } catch {}
+    return;
+  }
+  if (e.target.closest('[data-phone]')) {
+    await invoke('open_app', { target: null });
+    T.event.emitTo('app', 'open-settings');
+  }
+});
 const EDGE = 12; // çekmece penceresinin gölge payı
 
 function openSheet(kind, id, el, align = 'left') {
@@ -140,6 +183,10 @@ const runStart = new Map(); // sessionId -> çalışmaya başladığı an
 const LONG_RUN = 60_000; // 1 dakikadan uzun süren iş bitince bildir
 
 function onAgent(a, prev) {
+  if (!PRIMARY) {
+    if (prev && prev.status !== a.status && (a.status === 'done' || a.status === 'waiting')) flash(a.status);
+    return;
+  }
   if (a.status === 'running' && prev?.status !== 'running') runStart.set(a.sessionId, Date.now());
   if (prev && prev.status !== a.status) {
     if (a.status === 'done' || a.status === 'waiting') flash(a.status);
@@ -160,6 +207,7 @@ const next = {}; // hatırlatıcı id -> sonraki zaman
 const IDLE_RESET = 300; // 5 dk boşta kalınca sayaç baştan
 
 async function checkReminders() {
+  if (!PRIMARY) return;
   let idle = 0;
   try {
     idle = await invoke('idle_seconds');
@@ -193,6 +241,7 @@ T.event.listen('agent-remove', ({ payload: id }) => {
 });
 T.event.listen('settings', ({ payload }) => {
   S.settings = payload;
+  applyTheme(payload.theme);
   for (const k of Object.keys(next)) delete next[k];
   checkReminders();
 });
@@ -200,6 +249,7 @@ T.event.listen('layout', ({ payload: bar }) => setLayout(bar));
 T.event.listen('sys', ({ payload }) => {
   S.sys = payload;
   renderInds();
+  renderExtras();
 });
 T.event.listen('pop-open', ({ payload }) => {
   S.openKey = payload;
@@ -215,7 +265,9 @@ setInterval(render, 30000); // 3 saat kuralı ve süreler için
   const st = await getState();
   S.settings = st.settings;
   for (const a of st.agents) S.agents.set(a.sessionId, a);
+  applyTheme(S.settings.theme);
   setLayout(S.settings.bar);
+  renderExtras();
   await document.fonts.ready;
   render();
   await invoke('ready');

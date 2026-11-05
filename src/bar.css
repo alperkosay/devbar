@@ -8,7 +8,8 @@ html, body { background: transparent; }
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: 0 10px;
-  background: var(--bar);
+  background: var(--bar-bg);
+  border-bottom: 1px solid var(--bar-line);
   font-size: 12px;
 }
 .side-l, .side-r { display: flex; align-items: center; gap: 4px; min-width: 0; }
@@ -16,7 +17,7 @@ html, body { background: transparent; }
 
 .brand { display: flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 7px; color: var(--accent); font-weight: 600; }
 .brand svg { width: 14px; height: 14px; }
-.brand:hover { background: rgba(255, 255, 255, 0.07); }
+.brand:hover { background: var(--bar-hover); }
 
 .chip {
   display: flex;
@@ -31,10 +32,10 @@ html, body { background: transparent; }
   transition: background 0.15s;
   animation: pop 0.3s var(--spring);
 }
-.chip:hover { background: rgba(255, 255, 255, 0.08); }
+.chip:hover { background: var(--bar-hover); }
 .chip .dot { width: 7px; height: 7px; }
 .chip b { font-weight: 500; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
-.chip.waiting { background: rgba(251, 191, 36, 0.13); color: #fde68a; }
+.chip.waiting { background: rgba(251, 191, 36, 0.13); color: var(--waiting-text); }
 
 /* Ortadaki sekme: en acil oturumun durumu. Apple çentiği yerine iki yanı eğik bir trapez;
    alt kenarındaki çizgi durumu gösterir (mavi çalışıyor, sarı bekliyor, yeşil bitti). */
@@ -49,13 +50,13 @@ html, body { background: transparent; }
   justify-content: center;
   gap: 9px;
   padding: 0 calc(var(--slant) + 14px);
-  background: linear-gradient(180deg, #26262f 0%, #1c1c23 100%);
+  background: linear-gradient(180deg, var(--tab-a) 0%, var(--tab-b) 100%);
   clip-path: polygon(0 0, 100% 0, calc(100% - var(--slant)) 100%, var(--slant) 100%);
   white-space: nowrap;
   cursor: pointer;
   transition: background 0.2s;
 }
-.notch:hover { background: linear-gradient(180deg, #2e2e38 0%, #22222a 100%); }
+.notch:hover { background: linear-gradient(180deg, var(--tab-ha) 0%, var(--tab-hb) 100%); }
 .notch .ic { display: grid; place-items: center; width: 16px; height: 16px; flex: none; }
 .notch .ic svg { width: 14px; height: 14px; }
 .notch .ic.spark { color: var(--accent); }
@@ -64,7 +65,7 @@ html, body { background: transparent; }
 .notch .txt { display: flex; gap: 7px; min-width: 0; align-items: baseline; overflow: hidden; }
 .notch .txt b { font-weight: 600; flex: none; }
 .notch .txt span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
-.notch.waiting .txt span { color: #fde68a; }
+.notch.waiting .txt span { color: var(--waiting-text); }
 .notch .dots { display: flex; gap: 4px; }
 .notch .dots .dot { width: 6px; height: 6px; }
 .notch .more { flex: none; font-size: 11px; font-weight: 600; color: var(--blue); background: rgba(96, 165, 250, 0.14); padding: 1px 7px; border-radius: 99px; }
@@ -106,7 +107,7 @@ html, body { background: transparent; }
 @keyframes flash-a { 30% { filter: brightness(1.5); } }
 
 /* Yüzen ada modu: bar yok, sadece sekme. Pencere sekme boyunda. */
-body.float .bar { background: transparent; grid-template-columns: auto; justify-content: center; padding: 0; }
+body.float .bar { background: transparent; border-bottom: 0; grid-template-columns: auto; justify-content: center; align-items: start; padding: 0; }
 body.float .side-l, body.float .side-r { display: none; }
 body.float .notch { height: 34px; --slant: 18px; }
 
@@ -125,7 +126,7 @@ body.float .notch { height: 34px; --slant: 18px; }
   flex: none;
   transition: background 0.15s;
 }
-.ind:hover { background: rgba(255, 255, 255, 0.08); }
+.ind:hover { background: var(--bar-hover); }
 .ind svg { width: 13px; height: 13px; }
 .ind b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .ind span { color: var(--dim); font-size: 11px; }
@@ -139,9 +140,50 @@ body.float .notch { height: 34px; --slant: 18px; }
 
 /* Çekmecesi açık olan öğe, çekmeceyle aynı renkte "yapışık" görünür. */
 .brand.open, .ind.open, .chip.open {
-  background: #1d1d24;
+  background: var(--sheet);
   border-radius: 7px 7px 0 0;
   height: 30px;
   box-shadow: inset 0 2px 0 var(--accent);
 }
-.notch.open { background: linear-gradient(180deg, #2e2e38 0%, #24242c 100%); }
+.notch.open { background: linear-gradient(180deg, var(--tab-ha) 0%, var(--tab-hb) 100%); }
+/* Sağ taraf: oturumlar, ağ, IP, telefon, yeni oturum. */
+.side-r .sep { width: 1px; height: 14px; background: var(--line2); margin: 0 4px; flex: none; }
+.ind.net { font-variant-numeric: tabular-nums; gap: 4px; }
+.ind.net i { font-style: normal; color: var(--dim); font-size: 10.5px; }
+.ind.net .dn { color: var(--sky); }
+.ind.net .up { color: var(--pink); }
+.ind.ip svg { color: var(--teal); }
+.ind.ip.copied b { color: var(--green); }
+.ind.phone svg { color: var(--green); }
+.newbtn { display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: 7px; font-weight: 600; color: var(--accent); flex: none; }
+.newbtn:hover { background: var(--bar-hover); }
+.newbtn svg { width: 13px; height: 13px; }
+
+/* Liquid: cam kapsül, parlak üst kenar. */
+body[data-theme="liquid"] .bar { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25); }
+body[data-theme="liquid"] .notch {
+  clip-path: none;
+  height: 24px;
+  border-radius: 99px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), inset 0 -1px 0 rgba(255, 255, 255, 0.08), 0 4px 16px rgba(0, 0, 0, 0.35);
+  padding: 0 22px;
+}
+body[data-theme="liquid"] .notch::before {
+  background: radial-gradient(80% 140% at 30% -40%, rgba(255, 255, 255, 0.35), transparent 60%);
+  border-radius: inherit;
+}
+body[data-theme="liquid"] .notch::after { left: 22px; right: 22px; bottom: 2px; border-radius: 2px; }
+body[data-theme="liquid"] .brand.open, body[data-theme="liquid"] .ind.open, body[data-theme="liquid"] .chip.open {
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 2px 0 #fff;
+}
+body[data-theme="liquid"] .chip.waiting { background: rgba(255, 255, 255, 0.18); }
+body[data-theme="light"] .brand.open, body[data-theme="light"] .ind.open, body[data-theme="light"] .chip.open { background: #ffffff; }
+
+.side-r .chips, .side-r .extras { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.side-r .chips { overflow: hidden; }
+
+/* Yüzen modda Liquid kapsül de tepeye yapışık. */
+body.float[data-theme="liquid"] .notch { height: 34px; border-radius: 0 0 18px 18px; border-top: 0; }
+body.float[data-theme="liquid"] .notch { background: linear-gradient(180deg, rgba(70, 70, 76, 0.94), rgba(24, 24, 27, 0.96)); }

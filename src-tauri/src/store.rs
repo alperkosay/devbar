@@ -29,6 +29,8 @@ pub struct Settings {
     pub model: String,
     /// true: ekranın üstünde yer ayıran status bar, false: yüzen ada.
     pub bar: bool,
+    /// Bar ve çekmece teması: gece | liquid | light | ocean
+    pub theme: String,
     /// Son açılan klasörler, en yeni başta.
     pub recent: Vec<String>,
     pub reminders: Vec<Reminder>,
@@ -53,6 +55,7 @@ impl Default for Settings {
             permission_mode: String::new(),
             model: String::new(),
             bar: true,
+            theme: "gece".into(),
             recent: Vec::new(),
             reminders: vec![
                 r("water", "water", "Su iç", 30, true),

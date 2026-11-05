@@ -228,3 +228,12 @@ code { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; backg
 .rtext .mini { align-self: flex-start; margin-top: 2px; }
 
 .toast { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); background: #2a1414; color: #fecaca; border: 1px solid rgba(248, 113, 113, 0.3); font-size: 12px; padding: 8px 13px; border-radius: 10px; z-index: 5; animation: rise 0.2s var(--ease); max-width: 80%; }
+
+.themes { display: flex; gap: 8px; }
+.sw { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; box-shadow: 0 0 0 1px var(--line2); transition: transform 0.15s; }
+.sw:hover { transform: scale(1.1); }
+.sw.on { border-color: var(--accent); }
+.sw.gece { background: linear-gradient(135deg, #26262f, #0b0b0e); }
+.sw.liquid { background: linear-gradient(135deg, #ffffff 0%, #9a9aa6 45%, #18181b 100%); }
+.sw.light { background: linear-gradient(135deg, #ffffff, #e4e4ea); }
+.sw.ocean { background: linear-gradient(135deg, #38bdf8, #0a1628 70%); }

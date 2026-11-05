@@ -194,6 +194,8 @@ function settingsHtml() {
   return `<div class="settings">
     <div class="row"><div class="lbl"><b>Üst bar</b><span>Status bar ekranın üstünde yer ayırır; yüzen ada sadece küçük bir hap</span></div>
       ${seg('bar', [['true', 'Status bar', I.bar], ['false', 'Yüzen ada', I.float]])}</div>
+    <div class="row"><div class="lbl"><b>Bar teması</b><span>Üst bar ve açılan çekmeceler</span></div>
+      <div class="themes">${THEMES.map(([k, l]) => `<button class="sw ${k} ${(st.theme || 'gece') === k ? 'on' : ''}" data-themepick="${k}" title="${l}"></button>`).join('')}</div></div>
     <div class="row"><div class="lbl"><b>Varsayılan klasör</b><span>Yeni oturum listesinde en üstte</span></div>
       <button class="pathbtn" data-act="pick" title="${esc(st.cwd)}">${I.folder}<span>${esc(st.cwd)}</span></button></div>
     <div class="row"><div class="lbl"><b>İzin modu</b><span>${esc(permHint)} · yeni oturumlarda geçerli</span></div>
@@ -527,6 +529,12 @@ viewEl.addEventListener('click', async (e) => {
     await saveSettings();
     return renderBody();
   }
+  const tp = e.target.closest('[data-themepick]');
+  if (tp) {
+    S.settings.theme = tp.dataset.themepick;
+    await invoke('set_theme', { theme: S.settings.theme });
+    return renderBody();
+  }
   const rem = e.target.closest('[data-rem]');
   if (rem) {
     const r = S.settings.reminders[+rem.dataset.rem];
@@ -585,6 +593,10 @@ viewEl.addEventListener('click', async (e) => {
 T.event.listen('select', ({ payload }) => goTarget(payload));
 // Bardaki menüden "bu klasörde Claude".
 T.event.listen('new-tab', ({ payload: cwd }) => newTab(cwd));
+T.event.listen('show-new', () => {
+  S.view = 'new';
+  renderAll();
+});
 T.event.listen('open-settings', () => $('btn-settings').click());
 T.event.listen('settings', ({ payload }) => {
   S.settings = payload;

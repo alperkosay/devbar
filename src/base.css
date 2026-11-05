@@ -41,6 +41,120 @@
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ---------- Bar temaları ----------
+   Bar ve çekmece bu değişkenleri kullanır. data-theme: gece (varsayılan) | liquid | light | ocean */
+body {
+  --bar-bg: #16161b;
+  --bar-line: rgba(255, 255, 255, 0.05);
+  --bar-hover: rgba(255, 255, 255, 0.08);
+  --tab-a: #26262f;
+  --tab-b: #1c1c23;
+  --tab-ha: #2e2e38;
+  --tab-hb: #22222a;
+  --sheet: #1d1d24;
+  --row: #23232b;
+  --row2: #2a2a33;
+  --screen-fg: #c9c9d1;
+  --on-accent: #1a0d07;
+  --waiting-text: #fde68a;
+  --running-text: #93c5fd;
+}
+
+/* Liquid: siyah-beyaz cam. Barın arkasında Windows akrilik bulanıklığı açılır. */
+body[data-theme="liquid"] {
+  --bar-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04));
+  --bar-line: rgba(255, 255, 255, 0.2);
+  --bar-hover: rgba(255, 255, 255, 0.14);
+  --tab-a: rgba(255, 255, 255, 0.2);
+  --tab-b: rgba(255, 255, 255, 0.07);
+  --tab-ha: rgba(255, 255, 255, 0.28);
+  --tab-hb: rgba(255, 255, 255, 0.1);
+  --sheet: linear-gradient(180deg, rgba(44, 44, 48, 0.96), rgba(18, 18, 20, 0.97));
+  --row: rgba(255, 255, 255, 0.06);
+  --row2: rgba(255, 255, 255, 0.11);
+  --bg: rgba(0, 0, 0, 0.45);
+  --bg2: rgba(255, 255, 255, 0.06);
+  --bg3: rgba(255, 255, 255, 0.1);
+  --line: rgba(255, 255, 255, 0.12);
+  --line2: rgba(255, 255, 255, 0.2);
+  --text: #ffffff;
+  --soft: #e4e4e7;
+  --muted: #d4d4d8;
+  --dim: #b4b4bc;
+  --accent: #ffffff;
+  --blue: #ffffff;
+  --amber: #ffffff;
+  --green: #d4d4d8;
+  --red: #fafafa;
+  --sky: #e4e4e7;
+  --pink: #e4e4e7;
+  --teal: #e4e4e7;
+  --on-accent: #000000;
+  --waiting-text: #ffffff;
+  --running-text: #e4e4e7;
+  --screen-fg: #e4e4e7;
+}
+
+/* Açık: beyaz bar, koyu yazı. */
+body[data-theme="light"] {
+  --bar-bg: #f4f4f6;
+  --bar-line: rgba(0, 0, 0, 0.08);
+  --bar-hover: rgba(0, 0, 0, 0.06);
+  --tab-a: #ffffff;
+  --tab-b: #e9e9ee;
+  --tab-ha: #ffffff;
+  --tab-hb: #f1f1f5;
+  --sheet: #ffffff;
+  --row: #f4f4f7;
+  --row2: #eaeaef;
+  --bg: #f7f7f9;
+  --bg2: #f1f1f4;
+  --bg3: #e8e8ed;
+  --line: rgba(0, 0, 0, 0.08);
+  --line2: rgba(0, 0, 0, 0.14);
+  --text: #18181b;
+  --soft: #3f3f46;
+  --muted: #6b6b76;
+  --dim: #9a9aa6;
+  --accent: #d9653b;
+  --blue: #2563eb;
+  --amber: #d97706;
+  --green: #16a34a;
+  --red: #dc2626;
+  --sky: #0284c7;
+  --pink: #db2777;
+  --teal: #0d9488;
+  --on-accent: #ffffff;
+  --waiting-text: #b45309;
+  --running-text: #1d4ed8;
+  --screen-fg: #27272a;
+}
+
+/* Okyanus: lacivert, camgöbeği vurgu. */
+body[data-theme="ocean"] {
+  --bar-bg: #0a1628;
+  --bar-line: rgba(148, 197, 255, 0.1);
+  --bar-hover: rgba(148, 197, 255, 0.1);
+  --tab-a: #17305a;
+  --tab-b: #0f2142;
+  --tab-ha: #1d3a6b;
+  --tab-hb: #13284e;
+  --sheet: #0f1f3a;
+  --row: #152a4c;
+  --row2: #1b345c;
+  --bg: #081222;
+  --bg2: #0e1d38;
+  --bg3: #15294a;
+  --line: rgba(148, 197, 255, 0.1);
+  --line2: rgba(148, 197, 255, 0.18);
+  --text: #e8f1ff;
+  --soft: #c7d7f0;
+  --muted: #8aa4c8;
+  --dim: #5b7396;
+  --accent: #38bdf8;
+  --on-accent: #04202e;
+}
+
 * { box-sizing: border-box; }
 html, body {
   margin: 0;
