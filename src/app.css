@@ -234,6 +234,7 @@ code { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; backg
 .sw:hover { transform: scale(1.1); }
 .sw.on { border-color: var(--accent); }
 .sw.gece { background: linear-gradient(135deg, #2a2a33, #0b0b0e); }
+.sw.ink { background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.25) 22%, #000 55%); }
 .sw.liquid { background: radial-gradient(circle at 30% 25%, #ffffff 0%, #d4d4d8 30%, #52525b 70%, #18181b 100%); }
 .sw.aurora { background: linear-gradient(135deg, #5eead4 0%, #0f2a32 55%, #0c1a28 100%); }
 .sw.latte { background: linear-gradient(135deg, #fffdf9 0%, #efe6da 55%, #c2541f 100%); }

@@ -42,6 +42,7 @@ async function getState() {
 const THEMES = [
   ['gece', 'Obsidyen'],
   ['liquid', 'Liquid Glass'],
+  ['ink', 'Siyah Liquid'],
   ['aurora', 'Aurora'],
   ['latte', 'Latte'],
   ['sunset', 'Gün batımı'],

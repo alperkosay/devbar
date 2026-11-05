@@ -101,6 +101,46 @@ body[data-theme="liquid"] {
   --text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
 
+/* Siyah Liquid: düz siyah zemin, beyaz cam kenarlar; aktif öğe cam kapsül. */
+body[data-theme="ink"] {
+  --bar-bg: #000000;
+  --bar-line: rgba(255, 255, 255, 0.1);
+  --bar-glow: inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  --bar-hover: transparent;
+  --tab-a: #000000;
+  --tab-b: #000000;
+  --tab-ha: #000000;
+  --tab-hb: #000000;
+  --sheet: #000000;
+  --row: transparent;
+  --row2: transparent;
+  --bg: #050505;
+  --bg2: #0b0b0b;
+  --bg3: #141414;
+  --line: rgba(255, 255, 255, 0.1);
+  --line2: rgba(255, 255, 255, 0.2);
+  --text: #ffffff;
+  --soft: #ededed;
+  --muted: #b5b5b5;
+  --dim: #7a7a7a;
+  --accent: #ffffff;
+  --blue: #ffffff;
+  --amber: #ffffff;
+  --green: #d9d9d9;
+  --red: #ffffff;
+  --sky: #ededed;
+  --pink: #ededed;
+  --teal: #ededed;
+  --on-accent: #000000;
+  --waiting-text: #ffffff;
+  --running-text: #e5e5e5;
+  --screen-fg: #e5e5e5;
+  /* Cam kapsül: parlak üst kenar, ince beyaz halka, içte hafif ışık. */
+  --glass: linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.06) 55%, rgba(255, 255, 255, 0.1) 100%);
+  --glass-ring: inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 -1px 0 rgba(255, 255, 255, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.16), 0 4px 14px rgba(0, 0, 0, 0.8);
+  --edge: inset 0 0 0 1px rgba(255, 255, 255, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
 /* Aurora: koyu petrol mavisi, nane vurgu. */
 body[data-theme="aurora"] {
   --bar-bg: linear-gradient(90deg, #0a1c22 0%, #0c1a28 55%, #0f1830 100%);

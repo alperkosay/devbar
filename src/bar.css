@@ -229,3 +229,44 @@ body.float[data-theme="liquid"] .notch { background: linear-gradient(180deg, rgb
 .brand-menu:hover { background: var(--bar-hover); color: var(--text); }
 .brand-menu svg { width: 12px; height: 12px; }
 .brand-menu.open { color: var(--accent); }
+
+/* ---------- Siyah Liquid ---------- */
+body[data-theme="ink"] .bar { box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08); border-bottom: 0; }
+body[data-theme="ink"] .brand, body[data-theme="ink"] .brand-menu, body[data-theme="ink"] .ind,
+body[data-theme="ink"] .chip, body[data-theme="ink"] .newbtn {
+  border-radius: 99px;
+  transition: background 0.3s, box-shadow 0.3s, transform 0.35s var(--spring);
+}
+body[data-theme="ink"] .brand:hover, body[data-theme="ink"] .brand-menu:hover, body[data-theme="ink"] .ind:hover,
+body[data-theme="ink"] .chip:hover, body[data-theme="ink"] .newbtn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: var(--edge);
+}
+/* Aktif: çizgi yok, öğe cam kapsüle dönüşür. */
+body[data-theme="ink"] .brand.open, body[data-theme="ink"] .brand-menu.open, body[data-theme="ink"] .ind.open,
+body[data-theme="ink"] .chip.open, body[data-theme="ink"] .newbtn.open {
+  background: var(--glass);
+  box-shadow: var(--glass-ring);
+  color: #fff;
+  transform: scale(1.04);
+}
+body[data-theme="ink"] .brand.open::after, body[data-theme="ink"] .ind.open::after,
+body[data-theme="ink"] .chip.open::after, body[data-theme="ink"] .newbtn.open::after { display: none; }
+body[data-theme="ink"] .chip.waiting { background: rgba(255, 255, 255, 0.1); box-shadow: var(--edge); }
+
+/* Ortadaki sekme: siyah kapsül, cam kenar; haber anında içi cam olur. */
+body[data-theme="ink"] .notch {
+  clip-path: none;
+  height: 24px;
+  border-radius: 99px;
+  padding: 0 22px;
+  background: #000;
+  box-shadow: var(--edge);
+  transition: width 0.5s var(--spring), background 0.4s, box-shadow 0.4s;
+}
+body[data-theme="ink"] .notch:hover, body[data-theme="ink"] .notch.open { background: rgba(255, 255, 255, 0.06); }
+body[data-theme="ink"] .notch::before { display: none; }
+body[data-theme="ink"] .notch::after { left: 22px; right: 22px; bottom: 2px; border-radius: 2px; opacity: 0.35; }
+body[data-theme="ink"] .notch.announce { background: var(--glass); box-shadow: var(--glass-ring), 0 0 24px rgba(255, 255, 255, 0.12); }
+body[data-theme="ink"] .notch.announce::after { opacity: 0; }
+body.float[data-theme="ink"] .notch { height: 34px; border-radius: 0 0 18px 18px; }
