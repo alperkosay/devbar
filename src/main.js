@@ -694,6 +694,12 @@ document.addEventListener('mousedown', (e) => {
 });
 
 T.event.listen('toggle', () => (S.open ? closePanel() : openPanel()));
+// Tepsi menüsünden "Ayarlar".
+T.event.listen('open-settings', async () => {
+  if (!S.open) await openPanel(null);
+  S.view = 'settings';
+  renderAll();
+});
 
 // WebView odak değişirken anlık "odak kaybı" atabiliyor; kısa süre sonra tekrar bak.
 appWin.onFocusChanged(({ payload: focused }) => {

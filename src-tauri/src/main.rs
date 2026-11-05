@@ -397,8 +397,50 @@ fn poller(app: AppHandle, st: Shared) {
     });
 }
 
+/// Sağ alttaki sistem tepsisinde Ada ikonu: sol tık paneli açar/kapatır, sağ tık menü.
+fn tray(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+    let toggle = MenuItem::with_id(app, "toggle", "Paneli aç / kapat", true, Some("Ctrl+Alt+Space"))?;
+    let settings = MenuItem::with_id(app, "settings", "Ayarlar", true, None::<&str>)?;
+    let sep = PredefinedMenuItem::separator(app)?;
+    let quit = MenuItem::with_id(app, "quit", "Ada'yı kapat", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&toggle, &settings, &sep, &quit])?;
+
+    let mut b = TrayIconBuilder::with_id("ada").tooltip("Ada").menu(&menu).show_menu_on_left_click(false);
+    if let Some(icon) = app.default_window_icon() {
+        b = b.icon(icon.clone());
+    }
+    b.on_menu_event(|app, e| match e.id.as_ref() {
+        "toggle" => {
+            let _ = app.emit("toggle", ());
+        }
+        "settings" => {
+            let _ = app.emit("open-settings", ());
+        }
+        "quit" => {
+            let st = app.state::<Shared>().inner().clone();
+            shutdown(app, &st);
+            app.exit(0);
+        }
+        _ => {}
+    })
+    .on_tray_icon_event(|tray, e| {
+        if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = e {
+            let _ = tray.app_handle().emit("toggle", ());
+        }
+    })
+    .build(app)?;
+    Ok(())
+}
+
 fn main() {
     let app = tauri::Builder::default()
+        // İkinci kez açılırsa yeni kopya başlamaz, açık olanın paneli açılır.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            let _ = app.emit("toggle", ());
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -450,6 +492,9 @@ fn main() {
                 eprintln!("Telefon erişimi açılamadı: {e}");
             }
             poller(app.handle().clone(), st);
+            if let Err(e) = tray(app) {
+                eprintln!("Tepsi ikonu eklenemedi: {e}");
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
